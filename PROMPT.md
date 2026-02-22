@@ -18,4 +18,4 @@
 
 6. DO NOT IMPLEMENT PLACEHOLDER OR STUB IMPLEMENTATIONS. FULL IMPLEMENTATIONS ONLY.
 
-7. IMPORTANT: After committing, STOP. Do not continue to the next task. Use /exit to end the session so a new session can begin with a fresh context window.
+7. CRITICAL: You must complete ONLY ONE task per session. After committing and pushing your work, summarize your work. Then you MUST immediately run the command /exit with no further commentary or actions. Do not ask if there is anything else to do. Do not start the next task. Just run /exit.
