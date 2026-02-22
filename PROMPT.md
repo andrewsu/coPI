@@ -18,4 +18,4 @@
 
 6. DO NOT IMPLEMENT PLACEHOLDER OR STUB IMPLEMENTATIONS. FULL IMPLEMENTATIONS ONLY.
 
-7. CRITICAL: You must complete ONLY ONE task per session. After committing and pushing your work, summarize your work. Then you MUST immediately run the command /exit with no further commentary or actions. Do not ask if there is anything else to do. Do not start the next task. Just run /exit.
+7. CRITICAL: You must complete ONLY ONE task per session. After committing and pushing your work, summarize your work. Then you MUST immediately stop with no further commentary or actions. Do not ask if there is anything else to do. Do not start the next task. Just stop and wait.
