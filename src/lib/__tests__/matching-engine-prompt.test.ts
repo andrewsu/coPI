@@ -592,7 +592,7 @@ describe("matching-engine-prompt", () => {
     /** Missing required string fields should be reported. */
     it("rejects proposal with missing title", () => {
       const proposal = makeValidProposal();
-      delete (proposal as Record<string, unknown>).title;
+      delete (proposal as unknown as Record<string, unknown>).title;
       const result = validateProposal(proposal);
       expect(result.valid).toBe(false);
       expect(result.errors.some((e) => e.includes("title"))).toBe(true);
@@ -617,7 +617,7 @@ describe("matching-engine-prompt", () => {
     /** Missing anchoring_publication_pmids array should be reported. */
     it("rejects proposal without anchoring_publication_pmids array", () => {
       const proposal = makeValidProposal();
-      (proposal as Record<string, unknown>).anchoring_publication_pmids =
+      (proposal as unknown as Record<string, unknown>).anchoring_publication_pmids =
         "not an array";
       const result = validateProposal(proposal);
       expect(result.valid).toBe(false);
@@ -646,7 +646,7 @@ describe("matching-engine-prompt", () => {
         collaboration_type: "",
         confidence_tier: "invalid",
       });
-      delete (proposal as Record<string, unknown>).reasoning;
+      delete (proposal as unknown as Record<string, unknown>).reasoning;
       const result = validateProposal(proposal);
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThanOrEqual(3);
