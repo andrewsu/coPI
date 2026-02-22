@@ -33,7 +33,7 @@
 - [x] Build onboarding UI: profile generation progress indicator
 - [x] Build onboarding UI: profile review/edit page
 - [x] Build profile edit page (direct editing of all synthesized fields)
-- [ ] Build user-submitted text management UI (add/edit/delete, max 5)
+- [x] Build user-submitted text management UI (add/edit/delete, max 5)
 - [ ] Implement profile refresh (manual trigger)
 - [ ] Implement monthly refresh cron job (detect new publications, generate candidate, notify)
 - [ ] Build side-by-side profile comparison UI for refresh candidates
@@ -126,3 +126,4 @@
 - Profile synthesis edge cases (large input contexts, empty data, deduplication casing) are not fully addressed yet — monitor during real-world usage.
 - Array deduplication in output parsing is case-insensitive but preserves original case of first occurrence. If LLM outputs near-duplicates with different casing, only one is kept silently.
 - Retry prompt includes current error counts but message text may appear identical on repeated failures. Consider logging counts or adding retry attempt number to distinguish iterations.
+- User-submitted text management: the spec requires re-synthesis when texts are added/modified. This trigger should be implemented as part of the "Implement profile refresh (manual trigger)" task. Currently, saving texts only updates the JSONB field; the user must manually refresh their profile for changes to take effect in synthesis.

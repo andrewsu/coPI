@@ -91,6 +91,11 @@ export async function GET() {
     return NextResponse.json({ error: "Profile not found" }, { status: 404 });
   }
 
+  // Parse user-submitted texts from JSONB field
+  const userSubmittedTexts = Array.isArray(profile.userSubmittedTexts)
+    ? profile.userSubmittedTexts
+    : [];
+
   return NextResponse.json({
     researchSummary: profile.researchSummary,
     techniques: profile.techniques,
@@ -99,6 +104,7 @@ export async function GET() {
     keyTargets: profile.keyTargets,
     keywords: profile.keywords,
     grantTitles: profile.grantTitles,
+    userSubmittedTexts,
     profileVersion: profile.profileVersion,
     profileGeneratedAt: profile.profileGeneratedAt,
   });

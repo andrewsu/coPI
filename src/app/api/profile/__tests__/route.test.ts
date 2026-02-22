@@ -48,6 +48,7 @@ const VALID_PROFILE = {
   keyTargets: ["p53"],
   keywords: ["transcriptomics"],
   grantTitles: ["NIH R01 Grant"],
+  userSubmittedTexts: null,
   profileVersion: 1,
   profileGeneratedAt: new Date("2025-01-01"),
 };

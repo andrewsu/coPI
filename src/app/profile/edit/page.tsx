@@ -24,6 +24,12 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { TagInput } from "@/components/tag-input";
 
+interface SubmittedTextEntry {
+  label: string;
+  content: string;
+  submitted_at: string;
+}
+
 interface ProfileData {
   researchSummary: string;
   techniques: string[];
@@ -32,6 +38,7 @@ interface ProfileData {
   keyTargets: string[];
   keywords: string[];
   grantTitles: string[];
+  userSubmittedTexts: SubmittedTextEntry[];
   profileVersion: number;
   profileGeneratedAt: string;
 }
@@ -319,6 +326,31 @@ export default function ProfileEditPage() {
               </ul>
             </div>
           )}
+
+          {/* User-Submitted Texts — link to management page */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Research Texts
+            </label>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Free-text submissions that inform your profile and matching (never
+              shown to other researchers)
+            </p>
+            <div className="mt-1.5 flex items-center justify-between rounded-md bg-gray-50 px-4 py-3">
+              <span className="text-sm text-gray-700">
+                {(profile.userSubmittedTexts?.length ?? 0) > 0
+                  ? `${profile.userSubmittedTexts.length} text${profile.userSubmittedTexts.length === 1 ? "" : "s"} submitted`
+                  : "No texts submitted yet"}
+              </span>
+              <button
+                type="button"
+                onClick={() => router.push("/profile/submitted-texts")}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+              >
+                Manage
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Action buttons */}
