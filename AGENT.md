@@ -116,7 +116,7 @@ npm run type-check
 4. **Runtime versions:** Node v20.20.0, npm 10.8.2.
 5. **ts-node is required** as a devDependency for Jest TypeScript config (`jest.config.ts`).
 6. **next-auth v4** is used with the JWT session strategy. Session augmentation types are in `src/types/next-auth.d.ts`.
-7. **fast-xml-parser** is used to parse PubMed E-utilities XML responses (efetch). Configured with `isArray` for elements that can appear 0-N times (Author, AbstractText, etc.) and `ignoreAttributes: false` to access ArticleId IdType attributes.
+7. **fast-xml-parser** is used to parse PubMed E-utilities XML responses (efetch, db=pubmed). Configured with `isArray` for elements that can appear 0-N times (Author, AbstractText, etc.) and `ignoreAttributes: false` to access ArticleId IdType attributes. For PMC full-text XML (efetch, db=pmc), raw XML pattern matching with balanced tag extraction is used instead (`pmc.ts`) to preserve text ordering in mixed-content JATS XML elements. PMC uses a batch size of 10 (vs PubMed's 200) due to larger full-text response sizes.
 
 ## Key Design Decisions
 
