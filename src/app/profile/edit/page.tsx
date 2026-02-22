@@ -1,15 +1,20 @@
 /**
- * Onboarding profile review/edit page.
+ * Profile edit page — direct editing of all synthesized profile fields.
  *
- * Shown after the profile pipeline completes. Displays the LLM-generated
- * profile and allows the user to edit any field before proceeding.
+ * Accessible from the main app after onboarding. Allows users to edit
+ * their research profile at any time.
  *
- * Spec reference: auth-and-user-management.md, Signup Flow step 3:
- * "Review generated profile → user can edit any field"
+ * Spec reference: auth-and-user-management.md, Profile Management:
+ * "Users can view and directly edit all profile fields"
+ * "Edits save immediately and bump profile_version"
  *
  * Editable fields: research summary, techniques, experimental models,
  * disease areas, key targets, keywords.
  * Grant titles are displayed read-only (sourced from ORCID).
+ *
+ * Uses the same PUT /api/profile endpoint as the onboarding review page,
+ * with identical validation (150–250 word summary, ≥3 techniques, ≥1
+ * disease area, ≥1 key target).
  */
 
 "use client";
@@ -28,6 +33,7 @@ interface ProfileData {
   keywords: string[];
   grantTitles: string[];
   profileVersion: number;
+  profileGeneratedAt: string;
 }
 
 /** Counts words in text using whitespace splitting (mirrors server-side logic). */
@@ -38,11 +44,7 @@ function countWords(text: string): number {
     .filter((w) => w.length > 0).length;
 }
 
-// ---------------------------------------------------------------------------
-// Main review page
-// ---------------------------------------------------------------------------
-
-export default function ProfileReviewPage() {
+export default function ProfileEditPage() {
   const { status: sessionStatus } = useSession();
   const router = useRouter();
 
@@ -52,6 +54,7 @@ export default function ProfileReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -61,7 +64,7 @@ export default function ProfileReviewPage() {
       try {
         const res = await fetch("/api/profile");
         if (res.status === 404) {
-          // No profile yet — redirect to onboarding pipeline
+          // No profile yet — redirect to onboarding
           router.replace("/onboarding");
           return;
         }
@@ -86,23 +89,19 @@ export default function ProfileReviewPage() {
       setProfile((prev) => (prev ? { ...prev, [field]: value } : prev));
       setDirty(true);
       setSaveErrors([]);
+      setSaveSuccess(false);
     },
     [],
   );
 
-  /** Save changes and proceed. If no changes, proceed without saving. */
-  const handleContinue = useCallback(async () => {
-    if (!profile) return;
-
-    // If nothing changed, just proceed
-    if (!dirty) {
-      router.push("/");
-      return;
-    }
+  /** Save profile changes via PUT /api/profile. */
+  const handleSave = useCallback(async () => {
+    if (!profile || !dirty) return;
 
     setSaving(true);
     setSaveErrors([]);
     setError(null);
+    setSaveSuccess(false);
 
     try {
       const res = await fetch("/api/profile", {
@@ -128,13 +127,21 @@ export default function ProfileReviewPage() {
         throw new Error("Failed to save profile");
       }
 
-      router.push("/");
+      const updated = (await res.json()) as ProfileData;
+      setProfile(updated);
+      setDirty(false);
+      setSaveSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile");
     } finally {
       setSaving(false);
     }
-  }, [profile, dirty, router]);
+  }, [profile, dirty]);
+
+  /** Navigate back to home without saving. */
+  const handleBack = useCallback(() => {
+    router.push("/");
+  }, [router]);
 
   // Loading states
   if (sessionStatus === "loading" || loading) {
@@ -151,10 +158,10 @@ export default function ProfileReviewPage() {
         <div className="text-center">
           <p className="text-red-600 font-medium">{error}</p>
           <button
-            onClick={() => router.replace("/onboarding")}
+            onClick={() => router.push("/")}
             className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
-            Back to onboarding
+            Back to home
           </button>
         </div>
       </main>
@@ -169,13 +176,39 @@ export default function ProfileReviewPage() {
   return (
     <main className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="mx-auto max-w-2xl">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Review Your Profile</h1>
+        {/* Header with back navigation */}
+        <div className="mb-8">
+          <button
+            onClick={handleBack}
+            className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M17 10a.75.75 0 01-.75.75H5.612l4.158 3.96a.75.75 0 11-1.04 1.08l-5.5-5.25a.75.75 0 010-1.08l5.5-5.25a.75.75 0 111.04 1.08L5.612 9.25H16.25A.75.75 0 0117 10z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Back to home
+          </button>
+          <h1 className="text-3xl font-bold tracking-tight">Edit Your Profile</h1>
           <p className="mt-2 text-sm text-gray-500">
-            We generated a research profile from your publications. Review it below
-            and make any edits before continuing.
+            Update your research profile. Changes will bump your profile version
+            and trigger re-evaluation of collaboration proposals.
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            Profile version {profile.profileVersion}
           </p>
         </div>
+
+        {/* Success message */}
+        {saveSuccess && (
+          <div className="mb-6 rounded-md bg-green-50 p-4">
+            <p className="text-sm text-green-700">
+              Profile saved successfully (version {profile.profileVersion}).
+            </p>
+          </div>
+        )}
 
         {/* Validation errors from server */}
         {saveErrors.length > 0 && (
@@ -289,14 +322,21 @@ export default function ProfileReviewPage() {
         </div>
 
         {/* Action buttons */}
-        <div className="mt-8 flex justify-end gap-3">
+        <div className="mt-8 flex justify-between">
           <button
             type="button"
-            onClick={handleContinue}
-            disabled={saving}
+            onClick={handleBack}
+            className="rounded-md border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            {dirty ? "Discard Changes" : "Back"}
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !dirty}
             className="rounded-md bg-blue-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? "Saving..." : dirty ? "Save & Continue" : "Looks Good"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>

@@ -10,6 +10,7 @@
  */
 
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -41,9 +42,15 @@ export default async function HomePage() {
         </p>
         <p className="mt-1 text-sm text-gray-500">{session.user.orcid}</p>
         <p className="mt-6 text-gray-500">
-          Profile review and match pool setup coming soon...
+          Match pool setup coming soon...
         </p>
-        <div className="mt-6">
+        <div className="mt-6 flex flex-col items-center gap-3">
+          <Link
+            href="/profile/edit"
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+          >
+            Edit Profile
+          </Link>
           <SignOutButton />
         </div>
       </div>

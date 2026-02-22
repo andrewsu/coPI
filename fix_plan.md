@@ -32,7 +32,7 @@
 - [x] Implement full pipeline orchestration (ORCID → PubMed → synthesis → store)
 - [x] Build onboarding UI: profile generation progress indicator
 - [x] Build onboarding UI: profile review/edit page
-- [ ] Build profile edit page (direct editing of all synthesized fields)
+- [x] Build profile edit page (direct editing of all synthesized fields)
 - [ ] Build user-submitted text management UI (add/edit/delete, max 5)
 - [ ] Implement profile refresh (manual trigger)
 - [ ] Implement monthly refresh cron job (detect new publications, generate candidate, notify)

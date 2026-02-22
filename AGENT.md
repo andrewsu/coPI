@@ -26,7 +26,8 @@ copi/
 │   ├── app/            # Next.js app router pages
 │   │   ├── onboarding/ # Onboarding UI (client component with progress polling)
 │   │   └── api/onboarding/  # Onboarding API (generate-profile, profile-status)
-│   ├── components/     # React components
+│   │   ├── profile/edit/ # Profile edit page (post-onboarding)
+│   ├── components/     # React components (TagInput, SignOutButton, Providers)
 │   ├── lib/            # Shared utilities, API clients, auth config
 │   ├── services/       # Business logic (profile pipeline, matching engine, notifications)
 │   └── worker/         # Background job processor
@@ -142,6 +143,12 @@ npm run type-check
 14. **Onboarding flow and pipeline progress tracking:** Pipeline progress is tracked via an in-memory status store (`src/lib/pipeline-status.ts`) keyed by userId, suitable for single-server pilot. The pipeline supports an `onProgress` callback in `PipelineOptions` that the API route uses to update status at each stage. API routes: `POST /api/onboarding/generate-profile` triggers the pipeline asynchronously (fire-and-forget), `GET /api/onboarding/profile-status` returns the current stage for UI polling. The home page (`src/app/page.tsx`) is a server component that checks for ResearcherProfile existence and redirects to `/onboarding` if none. The onboarding page (`src/app/onboarding/page.tsx`) is a client component that polls for status every 2 seconds and shows animated progress steps. On completion, the onboarding page redirects to `/onboarding/review` for profile review/editing.
 
 15. **Profile API and review page:** `GET /api/profile` returns the authenticated user's researcher profile fields. `PUT /api/profile` validates and updates editable fields (researchSummary, techniques, experimentalModels, diseaseAreas, keyTargets, keywords) with the same constraints as LLM synthesis validation (150–250 word summary, ≥3 techniques, ≥1 disease area, ≥1 key target). PUT bumps `profileVersion` and updates `profileGeneratedAt`. The review page (`src/app/onboarding/review/page.tsx`) uses a TagInput component for array fields (add/remove chips) and a textarea for the research summary. Grant titles are displayed read-only. The "Looks Good" / "Save & Continue" button only calls PUT if the user made edits, avoiding unnecessary version bumps.
+
+16. **Shared TagInput component:** `src/components/tag-input.tsx` is a reusable chip/tag list editor used by both the onboarding review page and the profile edit page. Supports add (Enter key or button), remove, case-insensitive duplicate prevention, and optional minimum item count validation.
+
+17. **Profile edit page** (`src/app/profile/edit/page.tsx`): Standalone profile editing accessible from the main app home page after onboarding. Uses the same `PUT /api/profile` endpoint as onboarding review. Differences from onboarding: has back navigation to home, "Save Changes" / "Discard Changes" flow (instead of "Looks Good"), shows save success confirmation inline, and displays profile version metadata.
+
+18. **React component testing:** Jest is configured with `jsx: "react-jsx"` override in `jest.config.ts` (overriding tsconfig's `jsx: "preserve"`) to support JSX transformation in tests. Component tests use `@jest-environment jsdom` directive, `@testing-library/react`, and `@testing-library/jest-dom`. Both packages plus `jest-environment-jsdom` are in devDependencies.
 
 ## Specifications
 
