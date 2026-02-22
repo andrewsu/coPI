@@ -27,6 +27,7 @@ copi/
 │   │   ├── onboarding/ # Onboarding UI (client component with progress polling)
 │   │   └── api/onboarding/  # Onboarding API (generate-profile, profile-status)
 │   │   ├── api/profile/ # Profile API (GET/PUT profile, GET/PUT submitted-texts)
+│   │   ├── api/match-pool/     # Match pool APIs (GET pool, DELETE entry, GET search, POST add)
 │   │   ├── profile/edit/ # Profile edit page (post-onboarding)
 │   │   ├── profile/submitted-texts/ # User-submitted text management page
 │   ├── components/     # React components (TagInput, SignOutButton, Providers)
@@ -159,6 +160,8 @@ npm run type-check
 21. **React component testing with unstable router mock:** The `next/navigation` `useRouter()` mock returns a new object on every render, making the `router` reference unstable. If `router` is used as a `useCallback` dependency, the callback is recreated every render, potentially causing `useEffect` infinite loops. Keep `fetchProfile` inline in the useEffect (as the original pattern) rather than extracting it to a `useCallback` with `router` dependency. Use a separate `reloadProfile` callback (with no `router` dependency) for post-refresh profile reloading.
 
 22. **Match pool management page:** `GET /api/match-pool` returns match pool entries with target user details (name, institution, department), affiliation selections, `totalCount`, and a cap of 200. `DELETE /api/match-pool/[entryId]` removes a single entry after ownership verification (returns 204). The management UI at `/match-pool/page.tsx` is a client component showing current pool entries with source badges, a stats bar with the 200-cap indicator, affiliation selection summary, entry removal with inline confirmation, and a contextual empty state. The page supports a `?onboarding=1` query parameter for the onboarding flow variant, which shows a different heading, requirement messaging, and a Continue button that is disabled until the pool is non-empty. The onboarding flow now routes: profile review → `/match-pool?onboarding=1` → home. The home page (`page.tsx`) enforces match pool setup by checking for both `MatchPoolEntry` and `AffiliationSelection` counts before allowing access. For Next.js 15 dynamic API routes with brackets (e.g., `[entryId]`), tests must live inside the bracketed directory's `__tests__/` folder since Jest can't resolve bracket paths from outside. The route handler receives `params` as a Promise (Next.js 15 convention).
+
+23. **Match pool user search and individual selection:** `GET /api/match-pool/search?q=<query>` searches users by name or institution (case-insensitive, Prisma `contains` with `mode: "insensitive"`), excludes the current user, returns up to 20 results ordered by name, and includes profile preview data (researchSummary, techniques, diseaseAreas, keyTargets — never user-submitted texts per spec). Each result includes an `inMatchPool` boolean checked efficiently via a single batch query on the returned user IDs. `POST /api/match-pool/add` creates a MatchPoolEntry with `source: "individual_select"` after validating: auth, non-self, target exists, not duplicate (uses compound unique `userId_targetUserId`). The match pool page (`/match-pool`) integrates search with a debounced input (300ms), expandable profile previews, inline "Add"/"Added" state, and auto-refreshes the pool after additions.
 
 ## Specifications
 

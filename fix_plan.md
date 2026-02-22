@@ -41,9 +41,9 @@
 ## Phase 4: Match Pool
 
 - [x] Build match pool management page
-- [ ] Implement user search (by name, institution)
-- [ ] Implement profile preview in search results (excluding user-submitted texts)
-- [ ] Implement individual user selection (add/remove from match pool)
+- [x] Implement user search (by name, institution)
+- [x] Implement profile preview in search results (excluding user-submitted texts)
+- [x] Implement individual user selection (add/remove from match pool)
 - [ ] Implement affiliation selection (institution/department filter, dynamic expansion)
 - [ ] Implement "all users" selection (dynamic expansion)
 - [ ] Implement match pool cap logic (200 cap, priority ordering)

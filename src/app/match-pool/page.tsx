@@ -5,19 +5,21 @@
  * how added) and allows removal of individual entries. Shows pool stats including
  * total count and the 200-user cap warning when exceeded.
  *
+ * Includes a search interface for finding and adding researchers by name or
+ * institution. Search results show a profile preview (research summary,
+ * techniques, disease areas, key targets) per spec — user-submitted texts
+ * are never exposed.
+ *
  * Spec reference: auth-and-user-management.md, Match Pool Management section.
  *
  * This page serves as both:
  * - An onboarding step (user must add at least one person before proceeding)
  * - A persistent management page accessible from the main app
- *
- * Adding researchers (search, affiliation selection, all-users) is handled by
- * separate Phase 4 tasks that will integrate into this page.
  */
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -49,6 +51,22 @@ interface MatchPoolData {
   affiliationSelections: AffiliationSelection[];
   totalCount: number;
   cap: number;
+}
+
+interface SearchResultProfile {
+  researchSummary: string;
+  techniques: string[];
+  diseaseAreas: string[];
+  keyTargets: string[];
+}
+
+interface SearchResult {
+  id: string;
+  name: string;
+  institution: string;
+  department: string | null;
+  profile: SearchResultProfile | null;
+  inMatchPool: boolean;
 }
 
 /** Human-readable label for each match pool source. */
@@ -87,6 +105,16 @@ export default function MatchPoolPage() {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
 
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [addingUserId, setAddingUserId] = useState<string | null>(null);
+  const [expandedProfileId, setExpandedProfileId] = useState<string | null>(
+    null,
+  );
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const fetchPool = useCallback(async () => {
     try {
       const res = await fetch("/api/match-pool");
@@ -97,7 +125,9 @@ export default function MatchPoolPage() {
       setData(poolData);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load match pool");
+      setError(
+        err instanceof Error ? err.message : "Failed to load match pool",
+      );
     } finally {
       setLoading(false);
     }
@@ -107,6 +137,77 @@ export default function MatchPoolPage() {
     if (sessionStatus !== "authenticated") return;
     fetchPool();
   }, [sessionStatus, fetchPool]);
+
+  /** Debounced search — fires 300ms after the user stops typing. */
+  useEffect(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/match-pool/search?q=${encodeURIComponent(trimmed)}`,
+        );
+        if (!res.ok) {
+          throw new Error("Search failed");
+        }
+        const json = (await res.json()) as { users: SearchResult[] };
+        setSearchResults(json.users);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  /** Add a user to the match pool via individual selection. */
+  const handleAdd = useCallback(
+    async (targetUserId: string) => {
+      setAddingUserId(targetUserId);
+      try {
+        const res = await fetch("/api/match-pool/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetUserId }),
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to add researcher");
+        }
+        // Mark the user as in pool in search results
+        setSearchResults((prev) =>
+          prev.map((u) =>
+            u.id === targetUserId ? { ...u, inMatchPool: true } : u,
+          ),
+        );
+        // Re-fetch the pool data to get updated counts and entries
+        await fetchPool();
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to add researcher",
+        );
+      } finally {
+        setAddingUserId(null);
+      }
+    },
+    [fetchPool],
+  );
 
   /** Remove a single match pool entry after user confirms. */
   const handleRemove = useCallback(
@@ -214,6 +315,136 @@ export default function MatchPoolPage() {
           </div>
         )}
 
+        {/* Search section */}
+        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-medium text-gray-700 mb-3">
+            Add Researchers
+          </h2>
+          <div className="relative">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name or institution..."
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            {searchLoading && (
+              <div className="absolute right-3 top-2.5">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+              </div>
+            )}
+          </div>
+
+          {/* Search results */}
+          {searchQuery.trim().length >= 2 && !searchLoading && (
+            <div className="mt-3">
+              {searchResults.length === 0 ? (
+                <p className="text-sm text-gray-500 py-2">
+                  No researchers found matching &ldquo;{searchQuery.trim()}
+                  &rdquo;
+                </p>
+              ) : (
+                <ul className="divide-y divide-gray-100 border border-gray-200 rounded-md">
+                  {searchResults.map((user) => (
+                    <li key={user.id} className="px-3 py-3">
+                      <div className="flex items-start justify-between">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-gray-900">
+                            {user.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {user.institution}
+                            {user.department && (
+                              <span> &middot; {user.department}</span>
+                            )}
+                          </p>
+                          {/* Profile preview toggle */}
+                          {user.profile && (
+                            <button
+                              onClick={() =>
+                                setExpandedProfileId(
+                                  expandedProfileId === user.id
+                                    ? null
+                                    : user.id,
+                                )
+                              }
+                              className="mt-1 text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              {expandedProfileId === user.id
+                                ? "Hide profile"
+                                : "View profile"}
+                            </button>
+                          )}
+                          {!user.profile && (
+                            <p className="mt-1 text-xs text-gray-400 italic">
+                              Profile not yet generated
+                            </p>
+                          )}
+                        </div>
+                        <div className="ml-3 flex-shrink-0">
+                          {user.inMatchPool ? (
+                            <span className="inline-flex items-center rounded-full bg-green-50 px-2.5 py-1 text-xs font-medium text-green-700">
+                              Added
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleAdd(user.id)}
+                              disabled={addingUserId === user.id}
+                              className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                            >
+                              {addingUserId === user.id
+                                ? "Adding..."
+                                : "Add"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {/* Expanded profile preview */}
+                      {expandedProfileId === user.id && user.profile && (
+                        <div className="mt-3 rounded-md bg-gray-50 p-3 text-xs text-gray-700">
+                          <p className="mb-2 leading-relaxed">
+                            {user.profile.researchSummary}
+                          </p>
+                          {user.profile.techniques.length > 0 && (
+                            <div className="mb-1.5">
+                              <span className="font-medium text-gray-600">
+                                Techniques:{" "}
+                              </span>
+                              <span>
+                                {user.profile.techniques.join(", ")}
+                              </span>
+                            </div>
+                          )}
+                          {user.profile.diseaseAreas.length > 0 && (
+                            <div className="mb-1.5">
+                              <span className="font-medium text-gray-600">
+                                Disease areas:{" "}
+                              </span>
+                              <span>
+                                {user.profile.diseaseAreas.join(", ")}
+                              </span>
+                            </div>
+                          )}
+                          {user.profile.keyTargets.length > 0 && (
+                            <div>
+                              <span className="font-medium text-gray-600">
+                                Key targets:{" "}
+                              </span>
+                              <span>
+                                {user.profile.keyTargets.join(", ")}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Stats bar — shown when pool is not empty */}
         {!isEmpty && (
           <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
@@ -319,12 +550,10 @@ export default function MatchPoolPage() {
               />
             </svg>
             <h3 className="mt-4 text-lg font-medium text-gray-900">
-              Your match pool is empty
+              No researchers in your pool yet
             </h3>
             <p className="mt-2 text-sm text-gray-500">
-              Add researchers to your match pool to start receiving
-              collaboration proposals. You can search for individuals, select by
-              institution, or add all platform users.
+              Use the search above to find and add researchers.
             </p>
             {isOnboarding && (
               <p className="mt-3 text-xs text-amber-700">
