@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { countWords } from "@/lib/profile-synthesis-prompt";
+import { triggerMatchingForProfileUpdate } from "@/services/matching-triggers";
 
 /** Editable profile fields accepted by PUT. */
 interface ProfileUpdatePayload {
@@ -175,6 +176,11 @@ export async function PUT(request: NextRequest) {
       profileVersion: existing.profileVersion + 1,
       profileGeneratedAt: new Date(),
     },
+  });
+
+  // Profile version bumped — trigger re-evaluation of all pairs (fire-and-forget).
+  triggerMatchingForProfileUpdate(prisma, session.user.id).catch((err) => {
+    console.error("[profile/PUT] Failed to trigger matching:", err);
   });
 
   return NextResponse.json({

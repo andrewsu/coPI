@@ -24,6 +24,7 @@ import { prisma } from "@/lib/prisma";
 import { anthropic } from "@/lib/anthropic";
 import { runProfilePipeline } from "@/services/profile-pipeline";
 import { getPipelineStatus, setPipelineStage } from "@/lib/pipeline-status";
+import { triggerMatchingForProfileUpdate } from "@/services/matching-triggers";
 
 export async function POST() {
   const session = await getServerSession(authOptions);
@@ -66,6 +67,15 @@ export async function POST() {
           publicationsFound: result.publicationsStored,
           profileCreated: result.profileCreated,
         },
+      });
+
+      // Profile regenerated (version bumped) — trigger re-evaluation of all
+      // pairs involving this user. Fire-and-forget within the pipeline callback.
+      triggerMatchingForProfileUpdate(prisma, userId).catch((err) => {
+        console.error(
+          `[profile/refresh] Failed to trigger matching for user ${userId}:`,
+          err,
+        );
       });
     })
     .catch((err: unknown) => {

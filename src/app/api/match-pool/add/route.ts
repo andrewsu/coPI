@@ -16,6 +16,7 @@ import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { triggerMatchingForNewPair } from "@/services/matching-triggers";
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -88,6 +89,12 @@ export async function POST(request: NextRequest) {
       source: true,
       createdAt: true,
     },
+  });
+
+  // Trigger matching for the new pair (fire-and-forget).
+  // The handler checks eligibility before generating proposals.
+  triggerMatchingForNewPair(session.user.id, targetUserId).catch((err) => {
+    console.error("[match-pool/add] Failed to trigger matching:", err);
   });
 
   return NextResponse.json({ entry }, { status: 201 });

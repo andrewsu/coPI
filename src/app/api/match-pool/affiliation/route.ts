@@ -23,6 +23,7 @@ import { getServerSession } from "next-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { triggerMatchingForNewPairs } from "@/services/matching-triggers";
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -150,6 +151,17 @@ export async function POST(request: NextRequest) {
       skipDuplicates: true,
     });
     entriesCreated = result.count;
+  }
+
+  // Trigger matching for all newly added pairs (fire-and-forget).
+  // Uses all matching user IDs — the handler checks eligibility per pair.
+  if (matchingUsers.length > 0) {
+    triggerMatchingForNewPairs(
+      session.user.id,
+      matchingUsers.map((u) => u.id),
+    ).catch((err) => {
+      console.error("[match-pool/affiliation] Failed to trigger matching:", err);
+    });
   }
 
   return NextResponse.json(
