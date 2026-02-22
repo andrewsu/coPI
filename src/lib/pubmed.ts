@@ -181,7 +181,12 @@ function parseOneArticle(raw: PubMedRawArticle): PubMedArticle | null {
 
   if (!citation || !article) return null;
 
-  const pmid = String(citation.PMID?.["#text"] ?? citation.PMID ?? "");
+  const rawPmid = citation.PMID;
+  const pmid = String(
+    typeof rawPmid === "object" && rawPmid !== null
+      ? rawPmid["#text"]
+      : rawPmid ?? "",
+  );
   if (!pmid) return null;
 
   const title = extractTitle(article);

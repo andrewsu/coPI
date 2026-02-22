@@ -40,6 +40,7 @@ import {
   synthesizeProfile,
   type ProfileSynthesisResult,
 } from "./profile-synthesis";
+import type { PipelineStage } from "@/lib/pipeline-status";
 
 // --- Public types ---
 
@@ -48,6 +49,8 @@ export interface PipelineOptions {
   deepMining?: boolean;
   /** ORCID OAuth access token for member API access. */
   accessToken?: string;
+  /** Called when the pipeline transitions between major stages. */
+  onProgress?: (stage: PipelineStage) => void;
 }
 
 export interface PipelineResult {
@@ -122,10 +125,12 @@ export async function runProfilePipeline(
 ): Promise<PipelineResult> {
   const deepMining = options.deepMining ?? true;
   const accessToken = options.accessToken;
+  const onProgress = options.onProgress;
   const warnings: string[] = [];
   const ncbiDelayMs = getNcbiDelayMs();
 
   // --- Steps 1-3: Fetch ORCID data (profile, grants, works) in parallel ---
+  onProgress?.("fetching_orcid");
   const [orcidProfile, grantTitles, orcidWorks] = await Promise.all([
     fetchOrcidProfile(orcid, accessToken),
     fetchOrcidGrantTitles(orcid, accessToken),
@@ -165,6 +170,7 @@ export async function runProfilePipeline(
   ];
 
   // --- Step 4: Fetch PubMed abstracts ---
+  onProgress?.("fetching_publications");
   let pubmedArticles: PubMedArticle[] = [];
   if (allPmids.length > 0) {
     await delay(ncbiDelayMs);
@@ -172,6 +178,7 @@ export async function runProfilePipeline(
   }
 
   // --- Step 5: Deep mining (methods sections from PMC) ---
+  onProgress?.("mining_methods");
   const methodsByPmcid = new Map<string, string>();
   const pmidToPmcid = new Map<string, string>();
 
@@ -280,6 +287,7 @@ export async function runProfilePipeline(
   );
 
   // --- Step 9: Assemble synthesis input and call Claude ---
+  onProgress?.("synthesizing");
   const synthesisPublications: SynthesisPublication[] = pubmedArticles.map(
     (article) => {
       const authorPosition = determineAuthorPosition(

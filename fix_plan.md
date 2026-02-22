@@ -30,7 +30,7 @@
 - [x] Implement profile synthesis service (assemble context, call Claude, parse output)
 - [x] Implement profile validation (word count, minimum fields)
 - [x] Implement full pipeline orchestration (ORCID → PubMed → synthesis → store)
-- [ ] Build onboarding UI: profile generation progress indicator
+- [x] Build onboarding UI: profile generation progress indicator
 - [ ] Build onboarding UI: profile review/edit page
 - [ ] Build profile edit page (direct editing of all synthesized fields)
 - [ ] Build user-submitted text management UI (add/edit/delete, max 5)
@@ -119,7 +119,7 @@
 - Phase 6 depends on Phase 5 (proposals to display).
 - Phase 7 can be partially developed in parallel with Phase 6.
 - PubMed client (`pubmed.ts`) does not send `tool` or `email` parameters on E-utilities requests, unlike the ID converter and PMC clients. Should be harmonized per NCBI API guidelines.
-- PubMed client (`pubmed.ts`) has a pre-existing TypeScript strict error on line 184 (`Element implicitly has an 'any' type because expression of type '"#text"' can't be used to index type 'string | { "#text": string; }'`). Should be fixed with a type narrowing check.
+- ~~PubMed client (`pubmed.ts`) has a pre-existing TypeScript strict error on line 184~~ — Fixed with type narrowing check for `citation.PMID`.
 - Pipeline orchestration (`profile-pipeline.ts`) adds inter-call NCBI rate limiting delays (350ms without API key, 110ms with key) between distinct API calls. Individual clients' internal batch processing still lacks inter-batch delays for researchers with 400+ publications; adding HTTP-level retry/backoff for 429 errors remains a future enhancement.
 - Pipeline handles zero-publication researchers: synthesis still runs with grants + user-submitted texts.
 - Pipeline stores DOI-only ORCID works that can't resolve to PMIDs as minimal Publication records (empty abstract, middle author position).

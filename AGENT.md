@@ -24,6 +24,8 @@ copi/
 │   └── schema.prisma   # Database schema
 ├── src/
 │   ├── app/            # Next.js app router pages
+│   │   ├── onboarding/ # Onboarding UI (client component with progress polling)
+│   │   └── api/onboarding/  # Onboarding API (generate-profile, profile-status)
 │   ├── components/     # React components
 │   ├── lib/            # Shared utilities, API clients, auth config
 │   ├── services/       # Business logic (profile pipeline, matching engine, notifications)
@@ -136,6 +138,8 @@ npm run type-check
 12. **Profile pipeline orchestration** (`src/services/profile-pipeline.ts`): Coordinates the full ingestion pipeline. Takes `PrismaClient` and `Anthropic` client as injected dependencies for testability. Pipeline steps: (1) ORCID profile/grants/works fetched in parallel, (2) DOI-only works resolved to PMIDs via NCBI ID Converter, (3) PubMed abstracts batch-fetched, (4) PMC methods sections deep-mined with rate-limited batching, (5) Publication records stored (full refresh: delete-then-create), (6) SHA-256 abstracts hash computed for change detection, (7) LLM synthesis called, (8) ResearcherProfile created/updated with version bump. Inter-call NCBI rate limiting is enforced via delays (110ms with API key, 350ms without). PMC batching is done at the pipeline level (batch size 10 with delays) rather than relying on the client's internal batching. The pipeline exports helper functions (`extractLastName`, `computeAbstractsHash`, `parseUserSubmittedTexts`, `getNcbiDelayMs`) for unit testing.
 
 13. **Testing with fake timers:** Pipeline tests use `jest.useFakeTimers()` + `jest.advanceTimersByTimeAsync()` to avoid real delay waits. The pattern wraps `runProfilePipeline()` in a helper that advances timers by 10 seconds (enough to cover all NCBI delays). This makes the 30-test suite run in <0.3s instead of ~20s.
+
+14. **Onboarding flow and pipeline progress tracking:** Pipeline progress is tracked via an in-memory status store (`src/lib/pipeline-status.ts`) keyed by userId, suitable for single-server pilot. The pipeline supports an `onProgress` callback in `PipelineOptions` that the API route uses to update status at each stage. API routes: `POST /api/onboarding/generate-profile` triggers the pipeline asynchronously (fire-and-forget), `GET /api/onboarding/profile-status` returns the current stage for UI polling. The home page (`src/app/page.tsx`) is a server component that checks for ResearcherProfile existence and redirects to `/onboarding` if none. The onboarding page (`src/app/onboarding/page.tsx`) is a client component that polls for status every 2 seconds and shows animated progress steps.
 
 ## Specifications
 

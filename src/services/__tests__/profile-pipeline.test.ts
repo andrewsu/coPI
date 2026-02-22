@@ -803,6 +803,53 @@ describe("profile-pipeline", () => {
     ).rejects.toThrow("ORCID person API error");
   });
 
+  // --- onProgress callback ---
+
+  it("calls onProgress callback at each major stage in order", async () => {
+    /** Verifies that the pipeline reports progress for the onboarding UI.
+     *  The four stages correspond to spec messages:
+     *  fetching_orcid → "Pulling your publications..."
+     *  fetching_publications → "Pulling your publications..."
+     *  mining_methods → "Analyzing your research..."
+     *  synthesizing → "Building your profile..." */
+    const onProgress = jest.fn();
+
+    await runPipelineWithTimers(
+      mockDb as unknown as PrismaClient,
+      mockLlm,
+      "user-1",
+      "0000-0001-2345-6789",
+      { onProgress },
+    );
+
+    expect(onProgress).toHaveBeenCalledWith("fetching_orcid");
+    expect(onProgress).toHaveBeenCalledWith("fetching_publications");
+    expect(onProgress).toHaveBeenCalledWith("mining_methods");
+    expect(onProgress).toHaveBeenCalledWith("synthesizing");
+
+    // Verify correct ordering
+    const calls = onProgress.mock.calls.map((c: [string]) => c[0]);
+    const orcidIdx = calls.indexOf("fetching_orcid");
+    const pubIdx = calls.indexOf("fetching_publications");
+    const miningIdx = calls.indexOf("mining_methods");
+    const synthIdx = calls.indexOf("synthesizing");
+    expect(orcidIdx).toBeLessThan(pubIdx);
+    expect(pubIdx).toBeLessThan(miningIdx);
+    expect(miningIdx).toBeLessThan(synthIdx);
+  });
+
+  it("does not throw when onProgress is not provided", async () => {
+    /** Backward compatibility: pipeline works fine without progress callback. */
+    await expect(
+      runPipelineWithTimers(
+        mockDb as unknown as PrismaClient,
+        mockLlm,
+        "user-1",
+        "0000-0001-2345-6789",
+      ),
+    ).resolves.toBeDefined();
+  });
+
   // --- Works with only PMIDs (no DOIs) ---
 
   it("skips DOI conversion when all works have PMIDs", async () => {
