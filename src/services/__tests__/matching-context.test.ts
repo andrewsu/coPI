@@ -178,8 +178,8 @@ describe("assembleContextForPair", () => {
     expect(result!.researcherA.techniques).toEqual(["CRISPR", "RNA-seq"]);
     expect(result!.researcherA.grantTitles).toEqual(["NIH R01", "NSF CAREER"]);
     expect(result!.researcherA.publications).toHaveLength(2);
-    expect(result!.researcherA.publications[0].title).toBe("Alice paper 1");
-    expect(result!.researcherA.publications[0].authorPosition).toBe("last");
+    expect(result!.researcherA.publications[0]!.title).toBe("Alice paper 1");
+    expect(result!.researcherA.publications[0]!.authorPosition).toBe("last");
 
     expect(result!.researcherB.name).toBe("Dr. Bob");
     expect(result!.researcherB.institution).toBe("Stanford");
@@ -322,9 +322,9 @@ describe("assembleContextForPair", () => {
     const result = await assembleContextForPair(db, USER_A_ID, USER_B_ID);
 
     expect(result).not.toBeNull();
-    expect(result!.researcherA.publications[0].authorPosition).toBe("first");
-    expect(result!.researcherA.publications[1].authorPosition).toBe("last");
-    expect(result!.researcherA.publications[2].authorPosition).toBe("middle");
+    expect(result!.researcherA.publications[0]!.authorPosition).toBe("first");
+    expect(result!.researcherA.publications[1]!.authorPosition).toBe("last");
+    expect(result!.researcherA.publications[2]!.authorPosition).toBe("middle");
   });
 
   it("fetches all data in parallel for efficiency", async () => {
@@ -460,10 +460,10 @@ describe("assembleContextForPairs", () => {
 
     expect(result.contexts).toHaveLength(2);
     expect(result.errors).toHaveLength(0);
-    expect(result.contexts[0].input.researcherA.name).toBe("Alice");
-    expect(result.contexts[0].input.researcherB.name).toBe("Bob");
-    expect(result.contexts[1].input.researcherA.name).toBe("Alice");
-    expect(result.contexts[1].input.researcherB.name).toBe("Carol");
+    expect(result.contexts[0]!.input.researcherA.name).toBe("Alice");
+    expect(result.contexts[0]!.input.researcherB.name).toBe("Bob");
+    expect(result.contexts[1]!.input.researcherA.name).toBe("Alice");
+    expect(result.contexts[1]!.input.researcherB.name).toBe("Carol");
   });
 
   it("reports errors for pairs with missing researchers", async () => {
@@ -484,10 +484,10 @@ describe("assembleContextForPairs", () => {
     const result = await assembleContextForPairs(db, pairs);
 
     expect(result.contexts).toHaveLength(1);
-    expect(result.contexts[0].input.researcherB.name).toBe("Carol");
+    expect(result.contexts[0]!.input.researcherB.name).toBe("Carol");
     expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].pair.researcherBId).toBe(USER_B_ID);
-    expect(result.errors[0].error).toContain("missing profile or user record");
+    expect(result.errors[0]!.pair.researcherBId).toBe(USER_B_ID);
+    expect(result.errors[0]!.error).toContain("missing profile or user record");
   });
 
   it("reports errors for pairs that throw exceptions", async () => {
@@ -523,7 +523,7 @@ describe("assembleContextForPairs", () => {
     // First pair succeeds, second pair has an error
     expect(result.contexts).toHaveLength(1);
     expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].error).toBe("Database connection lost");
+    expect(result.errors[0]!.error).toBe("Database connection lost");
   });
 
   it("preserves pair metadata in the context result", async () => {
@@ -545,10 +545,10 @@ describe("assembleContextForPairs", () => {
     const result = await assembleContextForPairs(db, [pair]);
 
     expect(result.contexts).toHaveLength(1);
-    expect(result.contexts[0].pair.visibilityA).toBe("visible");
-    expect(result.contexts[0].pair.visibilityB).toBe("pending_other_interest");
-    expect(result.contexts[0].pair.profileVersionA).toBe(3);
-    expect(result.contexts[0].pair.profileVersionB).toBe(5);
+    expect(result.contexts[0]!.pair.visibilityA).toBe("visible");
+    expect(result.contexts[0]!.pair.visibilityB).toBe("pending_other_interest");
+    expect(result.contexts[0]!.pair.profileVersionA).toBe(3);
+    expect(result.contexts[0]!.pair.profileVersionB).toBe(5);
   });
 
   it("handles empty pairs array", async () => {

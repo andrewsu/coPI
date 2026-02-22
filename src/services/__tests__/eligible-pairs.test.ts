@@ -15,7 +15,7 @@
  */
 
 import type { PrismaClient } from "@prisma/client";
-import { computeEligiblePairs, type EligiblePair } from "../eligible-pairs";
+import { computeEligiblePairs } from "../eligible-pairs";
 
 // --- Mock Prisma ---
 
@@ -123,8 +123,8 @@ describe("computeEligiblePairs", () => {
       const pairs = await computeEligiblePairs(db);
 
       expect(pairs).toHaveLength(1);
-      expect(pairs[0].visibilityA).toBe("visible");
-      expect(pairs[0].visibilityB).toBe("visible");
+      expect(pairs[0]!.visibilityA).toBe("visible");
+      expect(pairs[0]!.visibilityB).toBe("visible");
     });
   });
 
@@ -193,9 +193,9 @@ describe("computeEligiblePairs", () => {
 
       // USER_A (lower UUID) = researcherA. B selected A, so B is the
       // selector and is "visible". A allows incoming so gets "pending".
-      expect(pairs[0].researcherAId).toBe(USER_A);
-      expect(pairs[0].visibilityA).toBe("pending_other_interest");
-      expect(pairs[0].visibilityB).toBe("visible");
+      expect(pairs[0]!.researcherAId).toBe(USER_A);
+      expect(pairs[0]!.visibilityA).toBe("pending_other_interest");
+      expect(pairs[0]!.visibilityB).toBe("visible");
     });
   });
 
@@ -269,8 +269,8 @@ describe("computeEligiblePairs", () => {
       const pairs = await computeEligiblePairs(db);
 
       expect(pairs).toHaveLength(1);
-      expect(pairs[0].profileVersionA).toBe(3);
-      expect(pairs[0].profileVersionB).toBe(7);
+      expect(pairs[0]!.profileVersionA).toBe(3);
+      expect(pairs[0]!.profileVersionB).toBe(7);
     });
   });
 
@@ -443,8 +443,8 @@ describe("computeEligiblePairs", () => {
 
       // Only A-C should remain
       expect(pairs).toHaveLength(1);
-      expect(pairs[0].researcherAId).toBe(USER_A);
-      expect(pairs[0].researcherBId).toBe(USER_C);
+      expect(pairs[0]!.researcherAId).toBe(USER_A);
+      expect(pairs[0]!.researcherBId).toBe(USER_C);
     });
   });
 
@@ -520,8 +520,8 @@ describe("computeEligiblePairs", () => {
       const pairs = await computeEligiblePairs(db);
 
       expect(pairs).toHaveLength(1);
-      expect(pairs[0].researcherAId).toBe(USER_A);
-      expect(pairs[0].researcherBId).toBe(USER_B);
+      expect(pairs[0]!.researcherAId).toBe(USER_A);
+      expect(pairs[0]!.researcherBId).toBe(USER_B);
     });
   });
 
@@ -569,8 +569,8 @@ describe("computeEligiblePairs", () => {
 
       expect(pairs).toHaveLength(1);
       // A is selector, B allows incoming → A visible, B pending
-      expect(pairs[0].visibilityA).toBe("visible");
-      expect(pairs[0].visibilityB).toBe("pending_other_interest");
+      expect(pairs[0]!.visibilityA).toBe("visible");
+      expect(pairs[0]!.visibilityB).toBe("pending_other_interest");
     });
   });
 });

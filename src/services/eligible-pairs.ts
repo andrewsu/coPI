@@ -213,8 +213,8 @@ interface VisibilityResult {
  * - Neither → not eligible
  */
 function computeVisibility(
-  userId: string,
-  targetUserId: string,
+  _userId: string,
+  _targetUserId: string,
   userSelectedTarget: boolean,
   targetSelectedUser: boolean,
   userAllowIncoming: boolean,

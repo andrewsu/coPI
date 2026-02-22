@@ -63,7 +63,7 @@
 - [x] Implement output validation (required fields, discard invalid)
 - [x] Implement de-duplication against existing proposals
 - [x] Implement MatchingResult tracking (avoid redundant evaluations)
-- [ ] Implement job queue integration (SQS or in-process for dev)
+- [x] Implement job queue integration (SQS or in-process for dev)
 - [ ] Implement matching triggers (match pool change, profile update, scheduled)
 - [ ] Implement error handling and retry logic
 
