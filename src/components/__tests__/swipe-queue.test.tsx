@@ -354,98 +354,8 @@ describe("SwipeQueue", () => {
     });
   });
 
-  it("navigates to next proposal via Next button", async () => {
-    /** Users can browse through the queue using navigation buttons. */
-    const proposals = [
-      makeProposal({ id: "p1" }),
-      makeProposal({
-        id: "p2",
-        collaborator: {
-          id: "u2",
-          name: "Dr. Bob Expert",
-          institution: "MIT",
-          department: null,
-        },
-      }),
-    ];
-    mockFetchWith(proposals);
-    render(<SwipeQueue hasMatchPool={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Next"));
-    });
-
-    expect(screen.getByText("Dr. Bob Expert")).toBeInTheDocument();
-    expect(screen.getByText("2 of 2 proposals")).toBeInTheDocument();
-  });
-
-  it("navigates back via Previous button", async () => {
-    /** Users can go back to previous cards in the queue. */
-    const proposals = [
-      makeProposal({ id: "p1" }),
-      makeProposal({
-        id: "p2",
-        collaborator: {
-          id: "u2",
-          name: "Dr. Bob Expert",
-          institution: "MIT",
-          department: null,
-        },
-      }),
-    ];
-    mockFetchWith(proposals);
-    render(<SwipeQueue hasMatchPool={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Next"));
-    });
-    expect(screen.getByText("Dr. Bob Expert")).toBeInTheDocument();
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Previous"));
-    });
-    expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
-    expect(screen.getByText("1 of 2 proposals")).toBeInTheDocument();
-  });
-
-  it("disables Previous button on first card", async () => {
-    /** Can't go back past the first card. */
-    mockFetchWith([makeProposal({ id: "p1" }), makeProposal({ id: "p2" })]);
-    render(<SwipeQueue hasMatchPool={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Previous")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Previous")).toBeDisabled();
-  });
-
-  it("disables Next button on last card", async () => {
-    /** Can't advance past the last card. */
-    mockFetchWith([makeProposal({ id: "p1" }), makeProposal({ id: "p2" })]);
-    render(<SwipeQueue hasMatchPool={true} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Next")).toBeInTheDocument();
-    });
-
-    await act(async () => {
-      fireEvent.click(screen.getByText("Next"));
-    });
-
-    expect(screen.getByText("Next")).toBeDisabled();
-  });
-
-  it("does not show navigation buttons for single proposal", async () => {
-    /** No navigation needed when there's only one proposal. */
+  it("shows Interested and Archive swipe action buttons", async () => {
+    /** Swipe actions replace the old navigation buttons per spec. */
     mockFetchWith([makeProposal()]);
     render(<SwipeQueue hasMatchPool={true} />);
 
@@ -453,8 +363,181 @@ describe("SwipeQueue", () => {
       expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
     });
 
-    expect(screen.queryByText("Previous")).not.toBeInTheDocument();
-    expect(screen.queryByText("Next")).not.toBeInTheDocument();
+    expect(screen.getByText("Interested")).toBeInTheDocument();
+    expect(screen.getByText("Archive")).toBeInTheDocument();
+  });
+
+  it("removes card from queue after archive swipe", async () => {
+    /** Archiving a proposal removes it from the queue and shows the next card
+     *  or empty state. */
+    const proposals = [
+      makeProposal({ id: "p1" }),
+      makeProposal({
+        id: "p2",
+        collaborator: {
+          id: "u2",
+          name: "Dr. Bob Expert",
+          institution: "MIT",
+          department: null,
+        },
+      }),
+    ];
+
+    // First call is queue fetch, subsequent calls are swipe POST
+    let callCount = 0;
+    global.fetch = jest.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+      callCount++;
+      if (opts?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            swipe: { id: "s1", direction: "archive", viewedDetail: false, timeSpentMs: null },
+            matched: false,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ proposals, totalCount: proposals.length }),
+      });
+    });
+
+    render(<SwipeQueue hasMatchPool={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1 of 2 proposals")).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Archive"));
+    });
+
+    // After archiving, the card is removed and we see the remaining card
+    await waitFor(() => {
+      expect(screen.getByText("Dr. Bob Expert")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1 of 1 proposal")).toBeInTheDocument();
+  });
+
+  it("shows match banner when interested swipe creates a match", async () => {
+    /** When both users are interested, a match banner appears briefly. */
+    global.fetch = jest.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+      if (opts?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            swipe: { id: "s1", direction: "interested", viewedDetail: false, timeSpentMs: null },
+            matched: true,
+            matchId: "match-1",
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          proposals: [makeProposal()],
+          totalCount: 1,
+        }),
+      });
+    });
+
+    render(<SwipeQueue hasMatchPool={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Interested"));
+    });
+
+    // Match banner should appear
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Match! You and Dr. Zara Scientist are both interested/)
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows 'all caught up' empty state after swiping all proposals", async () => {
+    /** After the user swipes on all proposals, they see the "all caught up" message. */
+    global.fetch = jest.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+      if (opts?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            swipe: { id: "s1", direction: "archive", viewedDetail: false, timeSpentMs: null },
+            matched: false,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          proposals: [makeProposal()],
+          totalCount: 1,
+        }),
+      });
+    });
+
+    render(<SwipeQueue hasMatchPool={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Archive"));
+    });
+
+    // Should show "all caught up" empty state
+    await waitFor(() => {
+      expect(screen.getByText("All caught up")).toBeInTheDocument();
+    });
+  });
+
+  it("sends correct swipe data including viewedDetail and timeSpentMs", async () => {
+    /** The swipe API call should include analytics data: viewedDetail and timeSpentMs. */
+    const fetchSpy = jest.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+      if (opts?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            swipe: { id: "s1", direction: "interested", viewedDetail: true, timeSpentMs: 5000 },
+            matched: false,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          proposals: [makeProposal()],
+          totalCount: 1,
+        }),
+      });
+    });
+    global.fetch = fetchSpy;
+
+    render(<SwipeQueue hasMatchPool={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Dr. Zara Scientist")).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Interested"));
+    });
+
+    // Find the POST call (not the initial GET)
+    const postCall = fetchSpy.mock.calls.find(
+      ([, opts]: [string, RequestInit | undefined]) => opts?.method === "POST"
+    );
+    expect(postCall).toBeDefined();
+    const body = JSON.parse(postCall![1]!.body as string);
+    expect(body.direction).toBe("interested");
+    expect(body.viewedDetail).toBe(false); // detail was not expanded
+    expect(typeof body.timeSpentMs).toBe("number");
   });
 
   it("shows error state with retry button on fetch failure", async () => {
@@ -571,8 +654,8 @@ describe("SwipeQueue", () => {
     expect(screen.queryByText("Scientific Question")).not.toBeInTheDocument();
   });
 
-  it("collapses detail view when navigating to next card", async () => {
-    /** When navigating between cards, the detail view should collapse. */
+  it("collapses detail view when swiping to next card", async () => {
+    /** When swiping on a card, the detail view should collapse and the next card is shown. */
     const proposals = [
       makeProposal({ id: "p1" }),
       makeProposal({
@@ -585,8 +668,31 @@ describe("SwipeQueue", () => {
         },
       }),
     ];
-    const detail = makeDetailData();
-    mockFetchWithDetail(proposals, detail);
+
+    global.fetch = jest.fn().mockImplementation((_url: string, opts?: RequestInit) => {
+      if (opts?.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            swipe: { id: "s1", direction: "archive", viewedDetail: true, timeSpentMs: null },
+            matched: false,
+          }),
+        });
+      }
+      // For detail fetches (contains /api/proposals/ with an ID)
+      if (typeof _url === "string" && /\/api\/proposals\/p\d+$/.test(_url)) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => makeDetailData(),
+        });
+      }
+      // Queue fetch
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ proposals, totalCount: proposals.length }),
+      });
+    });
+
     render(<SwipeQueue hasMatchPool={true} />);
 
     await waitFor(() => {
@@ -602,13 +708,15 @@ describe("SwipeQueue", () => {
       expect(screen.getByText("Scientific Question")).toBeInTheDocument();
     });
 
-    // Navigate to next card
+    // Swipe to archive the card (advances to next)
     await act(async () => {
-      fireEvent.click(screen.getByText("Next"));
+      fireEvent.click(screen.getByText("Archive"));
     });
 
-    // Detail should be collapsed, "See details" should be visible again
-    expect(screen.getByText("Dr. Bob Expert")).toBeInTheDocument();
+    // Detail should be collapsed, next card should be shown
+    await waitFor(() => {
+      expect(screen.getByText("Dr. Bob Expert")).toBeInTheDocument();
+    });
     expect(screen.getByText("See details")).toBeInTheDocument();
     expect(screen.queryByText("Scientific Question")).not.toBeInTheDocument();
   });

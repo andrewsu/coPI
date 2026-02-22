@@ -72,14 +72,14 @@
 - [x] Build swipe queue page with card UI
 - [x] Implement summary card (collaborator info, type, one-line summary, confidence indicator)
 - [x] Implement detail expansion (rationale, contributions, benefits, first experiment, publications)
-- [ ] Implement "Interested" swipe action with match detection
-- [ ] Implement "Archive" swipe action
-- [ ] Implement visibility state transitions (pending_other_interest → visible on interested swipe)
+- [x] Implement "Interested" swipe action with match detection
+- [x] Implement "Archive" swipe action
+- [x] Implement visibility state transitions (pending_other_interest → visible on interested swipe)
 - [ ] Build archive tab (view archived proposals, move back to interested)
 - [ ] Build matches tab (full proposal, profiles, contact info per email_visibility setting)
 - [ ] Implement empty states for all tabs
 - [ ] Implement periodic survey (every Nth archive, multi-select failure modes)
-- [ ] Track swipe analytics (viewed_detail, time_spent_ms)
+- [x] Track swipe analytics (viewed_detail, time_spent_ms)
 
 ## Phase 7: Notifications
 
@@ -127,4 +127,4 @@
 - Array deduplication in output parsing is case-insensitive but preserves original case of first occurrence. If LLM outputs near-duplicates with different casing, only one is kept silently.
 - Retry prompt includes current error counts but message text may appear identical on repeated failures. Consider logging counts or adding retry attempt number to distinguish iterations.
 - User-submitted text management: the spec requires re-synthesis when texts are added/modified. This trigger should be implemented as part of the "Implement profile refresh (manual trigger)" task. Currently, saving texts only updates the JSONB field; the user must manually refresh their profile for changes to take effect in synthesis.
-- Swipe queue page currently uses Previous/Next navigation buttons as temporary placeholders for browsing proposals. These will be replaced by the actual swipe actions (Interested/Archive) when those Phase 6 items are implemented.
+- ~~Swipe queue page currently uses Previous/Next navigation buttons as temporary placeholders for browsing proposals.~~ Replaced by Interested/Archive swipe action buttons with match detection, visibility transitions, and analytics tracking (viewedDetail, timeSpentMs).

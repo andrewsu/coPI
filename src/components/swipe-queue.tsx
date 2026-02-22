@@ -10,6 +10,10 @@
  * including scientific question, rationale, contributions, benefits, first
  * experiment, anchoring publications, and collaborator profile.
  *
+ * Swipe actions:
+ * - "Interested" (green): records interested swipe, checks for mutual match
+ * - "Archive" (gray): moves proposal to archive for later review
+ *
  * Handles all empty states per spec:
  * - No proposals + match pool populated -> "generating proposals"
  * - No proposals + empty match pool -> "add colleagues"
@@ -20,7 +24,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 
 export interface ProposalCard {
@@ -121,6 +125,17 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
   const [expandedProposalId, setExpandedProposalId] = useState<string | null>(
     null
   );
+  const [swiping, setSwiping] = useState(false);
+  const [matchBanner, setMatchBanner] = useState<string | null>(null);
+  // Track whether the user has swiped at least once this session (distinguishes
+  // "all proposals reviewed" from "no proposals ever generated")
+  const [hasSwiped, setHasSwiped] = useState(false);
+  // Track whether the user expanded details for the current card
+  const [viewedDetailIds, setViewedDetailIds] = useState<Set<string>>(
+    new Set()
+  );
+  // Track when each card was first shown (for timeSpentMs analytics)
+  const cardShownAtRef = useRef<Map<string, number>>(new Map());
 
   const fetchProposals = useCallback(async () => {
     try {
@@ -145,11 +160,108 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
     fetchProposals();
   }, [sessionStatus, fetchProposals]);
 
-  // Collapse detail view when navigating between cards.
-  const navigateTo = useCallback((index: number) => {
-    setCurrentIndex(index);
-    setExpandedProposalId(null);
-  }, []);
+  // Record when a card is first shown (for time_spent_ms tracking)
+  const proposals = data?.proposals ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const safeIndex = Math.min(currentIndex, Math.max(0, totalCount - 1));
+  const currentProposal = proposals[safeIndex] as ProposalCard | undefined;
+
+  useEffect(() => {
+    if (currentProposal && !cardShownAtRef.current.has(currentProposal.id)) {
+      cardShownAtRef.current.set(currentProposal.id, Date.now());
+    }
+  }, [currentProposal]);
+
+  const handleSwipe = useCallback(
+    async (direction: "interested" | "archive") => {
+      if (!currentProposal || swiping) return;
+
+      const proposalId = currentProposal.id;
+      const viewedDetail = viewedDetailIds.has(proposalId);
+      const shownAt = cardShownAtRef.current.get(proposalId);
+      const timeSpentMs = shownAt ? Date.now() - shownAt : undefined;
+
+      setSwiping(true);
+      setError(null);
+
+      try {
+        const res = await fetch(`/api/proposals/${proposalId}/swipe`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ direction, viewedDetail, timeSpentMs }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(
+            (err as { error?: string }).error || "Failed to record swipe"
+          );
+        }
+
+        const result = (await res.json()) as {
+          matched: boolean;
+          matchId?: string;
+        };
+
+        // Mark that the user has swiped during this session
+        setHasSwiped(true);
+
+        // Clean up tracking for this card
+        cardShownAtRef.current.delete(proposalId);
+        setViewedDetailIds((prev) => {
+          const next = new Set(prev);
+          next.delete(proposalId);
+          return next;
+        });
+
+        // Remove the swiped proposal from the local queue
+        setData((prev) => {
+          if (!prev) return prev;
+          const remaining = prev.proposals.filter((p) => p.id !== proposalId);
+          return { proposals: remaining, totalCount: remaining.length };
+        });
+
+        // Collapse detail view
+        setExpandedProposalId(null);
+
+        // Keep index in bounds (if we were at the end, go back one)
+        setCurrentIndex((prev) => {
+          const remainingCount = (data?.totalCount ?? 1) - 1;
+          if (prev >= remainingCount) return Math.max(0, remainingCount - 1);
+          return prev;
+        });
+
+        // Show match banner briefly if a match was created
+        if (result.matched) {
+          setMatchBanner(
+            `Match! You and ${currentProposal.collaborator.name} are both interested.`
+          );
+          setTimeout(() => setMatchBanner(null), 5000);
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to record swipe"
+        );
+      } finally {
+        setSwiping(false);
+      }
+    },
+    [currentProposal, swiping, viewedDetailIds, data?.totalCount]
+  );
+
+  // Track detail expansion for viewedDetail analytics
+  const handleToggleDetail = useCallback(() => {
+    if (!currentProposal) return;
+    const proposalId = currentProposal.id;
+    if (expandedProposalId === proposalId) {
+      // Collapsing
+      setExpandedProposalId(null);
+    } else {
+      // Expanding — mark as viewed
+      setExpandedProposalId(proposalId);
+      setViewedDetailIds((prev) => new Set(prev).add(proposalId));
+    }
+  }, [currentProposal, expandedProposalId]);
 
   if (sessionStatus === "loading" || loading) {
     return (
@@ -177,26 +289,33 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
     );
   }
 
-  const proposals = data?.proposals ?? [];
-  const totalCount = data?.totalCount ?? 0;
-
   // Empty state: no proposals available
-  if (totalCount === 0) {
-    return <EmptyState hasMatchPool={hasMatchPool} />;
-  }
-
-  // Current card to display (clamped to bounds)
-  const safeIndex = Math.min(currentIndex, totalCount - 1);
-  const currentProposal = proposals[safeIndex] as ProposalCard | undefined;
-
-  if (!currentProposal) {
-    return <EmptyState hasMatchPool={hasMatchPool} />;
+  if (totalCount === 0 || !currentProposal) {
+    return (
+      <div className="w-full max-w-lg mx-auto">
+        {matchBanner && (
+          <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
+            <p className="text-sm font-medium text-emerald-800">
+              {matchBanner}
+            </p>
+          </div>
+        )}
+        <EmptyState hasMatchPool={hasMatchPool} reviewed={hasSwiped} />
+      </div>
+    );
   }
 
   const isExpanded = expandedProposalId === currentProposal.id;
 
   return (
     <div className="w-full max-w-lg mx-auto">
+      {/* Match banner */}
+      {matchBanner && (
+        <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-center">
+          <p className="text-sm font-medium text-emerald-800">{matchBanner}</p>
+        </div>
+      )}
+
       {/* Queue counter */}
       <div className="mb-4 text-center">
         <span className="text-sm text-gray-500">
@@ -216,35 +335,57 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
       <ProposalSummaryCard
         proposal={currentProposal}
         isExpanded={isExpanded}
-        onToggleDetail={() =>
-          setExpandedProposalId(isExpanded ? null : currentProposal.id)
-        }
+        onToggleDetail={handleToggleDetail}
       />
 
       {/* Detail View — fetches and renders full proposal data */}
       {isExpanded && <ProposalDetailView proposalId={currentProposal.id} />}
 
-      {/* Navigation for browsing queue (temporary, swipe actions will replace this) */}
-      {totalCount > 1 && (
-        <div className="mt-4 flex items-center justify-center gap-4">
-          <button
-            onClick={() => navigateTo(Math.max(0, safeIndex - 1))}
-            disabled={safeIndex === 0}
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+      {/* Swipe action buttons */}
+      <div className="mt-6 flex items-center justify-center gap-6">
+        <button
+          onClick={() => handleSwipe("archive")}
+          disabled={swiping}
+          className="flex items-center gap-2 rounded-full border-2 border-gray-300 bg-white px-6 py-3 text-sm font-medium text-gray-600 shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Archive proposal"
+        >
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
           >
-            Previous
-          </button>
-          <button
-            onClick={() =>
-              navigateTo(Math.min(totalCount - 1, safeIndex + 1))
-            }
-            disabled={safeIndex === totalCount - 1}
-            className="rounded-md px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+          Archive
+        </button>
+        <button
+          onClick={() => handleSwipe("interested")}
+          disabled={swiping}
+          className="flex items-center gap-2 rounded-full border-2 border-emerald-500 bg-emerald-500 px-6 py-3 text-sm font-medium text-white shadow-sm hover:bg-emerald-600 hover:border-emerald-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label="Interested in proposal"
+        >
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
           >
-            Next
-          </button>
-        </div>
-      )}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+          Interested
+        </button>
+      </div>
     </div>
   );
 }
@@ -619,8 +760,47 @@ function ProfileTagList({
   );
 }
 
-/** Empty state messaging based on user context per spec. */
-function EmptyState({ hasMatchPool }: { hasMatchPool: boolean }) {
+/**
+ * Empty state messaging based on user context per spec.
+ * Shows different messages depending on match pool status and whether
+ * the user has reviewed all available proposals.
+ */
+function EmptyState({
+  hasMatchPool,
+  reviewed,
+}: {
+  hasMatchPool: boolean;
+  reviewed?: boolean;
+}) {
+  // "All proposals reviewed" state — user has swiped through everything
+  if (hasMatchPool && reviewed) {
+    return (
+      <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center">
+        <svg
+          className="mx-auto h-12 w-12 text-gray-400"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+        <h3 className="mt-4 text-lg font-medium text-gray-900">
+          All caught up
+        </h3>
+        <p className="mt-2 text-sm text-gray-500">
+          You&apos;ve reviewed all current proposals. We&apos;ll notify you when
+          new ones are available.
+        </p>
+      </div>
+    );
+  }
+
   if (!hasMatchPool) {
     return (
       <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white p-12 text-center">
