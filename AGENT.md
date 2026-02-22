@@ -80,6 +80,11 @@ npm test -- path/to/test.test.ts
 npm run test:coverage
 ```
 
+> **Note:** In non-interactive shells (scripts, tools that don't source your shell profile), `npm test` and `npx jest` will fail because nvm is not loaded. Source nvm first:
+> ```bash
+> source ~/.nvm/nvm.sh && npx jest src/lib/__tests__/orcid.test.ts
+> ```
+
 ### Database Operations
 
 ```bash
