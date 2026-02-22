@@ -157,12 +157,15 @@ async function handleGenerateProfile(
  *
  * Returns silently (no error, no retry) if the pair is not eligible
  * or if context assembly fails due to missing profile data.
+ * Re-throws errors from LLM calls or database storage to trigger
+ * queue retry with exponential backoff.
  */
 async function handleRunMatching(
   payload: RunMatchingJob,
   deps: WorkerDependencies,
 ): Promise<void> {
   const ordered = orderUserIds(payload.researcherAId, payload.researcherBId);
+  const pairLabel = `${ordered.researcherAId}—${ordered.researcherBId}`;
 
   // Check eligibility — this reuses the full eligibility logic including
   // version-based dedup against MatchingResult records.
@@ -178,8 +181,7 @@ async function handleRunMatching(
 
   if (!pair) {
     console.log(
-      `[Worker] Pair ${ordered.researcherAId}—${ordered.researcherBId} ` +
-        `not eligible or already evaluated. Skipping.`,
+      `[Worker] Pair ${pairLabel} not eligible or already evaluated. Skipping.`,
     );
     return;
   }
@@ -193,27 +195,37 @@ async function handleRunMatching(
 
   if (!input) {
     console.warn(
-      `[Worker] Failed to assemble context for pair ` +
-        `${pair.researcherAId}—${pair.researcherBId}. Missing profile data.`,
+      `[Worker] Failed to assemble context for pair ${pairLabel}. ` +
+        `Missing profile data.`,
     );
     return;
   }
 
   const pairContext: PairContext = { pair, input };
 
-  // Generate proposals via Claude
-  const result = await generateProposalsForPair(deps.anthropic, pairContext);
+  // Generate proposals and store results.
+  // Errors from LLM calls (after service-level retries with backoff are
+  // exhausted) or database storage are caught, logged, and re-thrown to
+  // trigger queue-level retry with exponential backoff.
+  try {
+    const result = await generateProposalsForPair(deps.anthropic, pairContext);
 
-  // Store proposals and matching result atomically
-  const summary = await storeProposalsAndResult(
-    deps.prisma,
-    pairContext,
-    result,
-  );
+    const summary = await storeProposalsAndResult(
+      deps.prisma,
+      pairContext,
+      result,
+    );
 
-  console.log(
-    `[Worker] Pair ${pair.researcherAId}—${pair.researcherBId}: ` +
-      `${result.proposals.length} proposals generated, ${summary.stored} stored, ` +
-      `${result.discarded} discarded, ${result.deduplicated} deduplicated`,
-  );
+    console.log(
+      `[Worker] Pair ${pairLabel}: ` +
+        `${result.proposals.length} proposals generated, ${summary.stored} stored, ` +
+        `${result.discarded} discarded, ${result.deduplicated} deduplicated`,
+    );
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[Worker] Pair ${pairLabel} matching failed: ${errorMessage}`,
+    );
+    throw err;
+  }
 }

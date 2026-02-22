@@ -394,7 +394,11 @@ describe("run_matching handler", () => {
     expect(mockStoreProposalsAndResult).not.toHaveBeenCalled();
   });
 
-  it("propagates errors from service calls for queue retry", async () => {
+  /**
+   * Errors from early service calls (eligibility check, context assembly)
+   * should propagate to trigger queue retry with exponential backoff.
+   */
+  it("propagates eligibility check errors for queue retry", async () => {
     mockComputeEligiblePairs.mockRejectedValueOnce(
       new Error("Database connection lost"),
     );
@@ -407,6 +411,92 @@ describe("run_matching handler", () => {
     });
 
     await expect(processor(job)).rejects.toThrow("Database connection lost");
+  });
+
+  /**
+   * LLM call errors (after service-level retries are exhausted) should be
+   * caught by the handler, logged with pair context, and re-thrown for
+   * queue-level retry with exponential backoff.
+   */
+  it("catches LLM errors, logs pair context, and re-throws for queue retry", async () => {
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    mockComputeEligiblePairs.mockResolvedValueOnce([eligiblePair]);
+    mockAssembleContextForPair.mockResolvedValueOnce(matchingInput);
+    mockGenerateProposalsForPair.mockRejectedValueOnce(
+      new Error("Rate limit exceeded after retries"),
+    );
+
+    const processor = createJobProcessor(mockDeps);
+    const job = makeQueuedJob({
+      type: "run_matching",
+      researcherAId: "aaa-111",
+      researcherBId: "bbb-222",
+    });
+
+    await expect(processor(job)).rejects.toThrow("Rate limit exceeded after retries");
+
+    // Error should be logged with pair context for debugging
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("matching failed"),
+    );
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Rate limit exceeded after retries"),
+    );
+  });
+
+  /**
+   * Database storage errors during storeProposalsAndResult should be
+   * caught, logged, and re-thrown for queue retry.
+   */
+  it("catches storage errors, logs them, and re-throws for queue retry", async () => {
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    mockComputeEligiblePairs.mockResolvedValueOnce([eligiblePair]);
+    mockAssembleContextForPair.mockResolvedValueOnce(matchingInput);
+    mockGenerateProposalsForPair.mockResolvedValueOnce({
+      proposals: [
+        {
+          title: "Test proposal",
+          collaboration_type: "Method transfer",
+          scientific_question: "Can we combine?",
+          one_line_summary_a: "Summary for A",
+          one_line_summary_b: "Summary for B",
+          detailed_rationale: "Good synergy",
+          lab_a_contributions: "CRISPR expertise",
+          lab_b_contributions: "RNA-seq data",
+          lab_a_benefits: "New data",
+          lab_b_benefits: "New tools",
+          proposed_first_experiment: "Run pilot",
+          anchoring_publication_pmids: [],
+          confidence_tier: "high",
+          reasoning: "Strong match",
+        },
+      ],
+      discarded: 0,
+      deduplicated: 0,
+      attempts: 1,
+      retried: false,
+      model: "claude-opus-4-20250514",
+      rawCount: 1,
+    });
+    mockStoreProposalsAndResult.mockRejectedValueOnce(
+      new Error("Transaction deadlock detected"),
+    );
+
+    const processor = createJobProcessor(mockDeps);
+    const job = makeQueuedJob({
+      type: "run_matching",
+      researcherAId: "aaa-111",
+      researcherBId: "bbb-222",
+    });
+
+    await expect(processor(job)).rejects.toThrow("Transaction deadlock detected");
+
+    // Error should be logged with pair context
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Transaction deadlock detected"),
+    );
   });
 });
 

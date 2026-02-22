@@ -66,6 +66,8 @@ export interface QueuedJob {
   attempts: number;
   maxAttempts: number;
   lastError?: string;
+  /** Earliest time this job should be processed (set by exponential backoff on retry). */
+  retryAfter?: Date;
 }
 
 /** Lifecycle status of a queued job. */
@@ -115,8 +117,11 @@ interface TrackedJob extends QueuedJob {
  * In-memory FIFO job queue for development and pilot deployments.
  *
  * Processes jobs sequentially (one at a time) in the same Node.js process.
- * Failed jobs are retried up to maxAttempts times. Jobs that exhaust all
- * attempts are dead-lettered (logged and not retried).
+ * Failed jobs are retried up to maxAttempts times with exponential backoff.
+ * Jobs that exhaust all attempts are dead-lettered (logged and not retried).
+ *
+ * Backoff formula: min(maxDelay, baseDelay × 2^(attempt-1)) + random jitter.
+ * This prevents thundering-herd on shared resources (e.g., Claude API).
  *
  * Not suitable for multi-process or distributed deployments — use an
  * SQS-backed implementation for those.
@@ -131,10 +136,21 @@ export class InMemoryJobQueue implements JobQueue {
   private nextId = 0;
   private readonly defaultMaxAttempts: number;
   private readonly pollIntervalMs: number;
+  private readonly retryBaseDelayMs: number;
+  private readonly retryMaxDelayMs: number;
 
-  constructor(options?: { maxAttempts?: number; pollIntervalMs?: number }) {
+  constructor(options?: {
+    maxAttempts?: number;
+    pollIntervalMs?: number;
+    /** Base delay for exponential backoff between retries (default: 1000ms). Set to 0 to disable backoff. */
+    retryBaseDelayMs?: number;
+    /** Maximum delay cap for exponential backoff (default: 30000ms). */
+    retryMaxDelayMs?: number;
+  }) {
     this.defaultMaxAttempts = options?.maxAttempts ?? 3;
     this.pollIntervalMs = options?.pollIntervalMs ?? 1000;
+    this.retryBaseDelayMs = options?.retryBaseDelayMs ?? 1000;
+    this.retryMaxDelayMs = options?.retryMaxDelayMs ?? 30000;
   }
 
   async enqueue(
@@ -230,10 +246,32 @@ export class InMemoryJobQueue implements JobQueue {
 
   // --- Internal ---
 
+  /**
+   * Computes the retry delay for a given attempt number using exponential backoff.
+   * Formula: min(maxDelay, baseDelay × 2^(attempt-1)) + random jitter (0–25%).
+   */
+  private computeRetryDelay(attempt: number): number {
+    if (this.retryBaseDelayMs <= 0) return 0;
+
+    const exponentialDelay =
+      this.retryBaseDelayMs * Math.pow(2, attempt - 1);
+    const cappedDelay = Math.min(exponentialDelay, this.retryMaxDelayMs);
+    // Add random jitter (0–25% of delay) to prevent thundering herd
+    const jitter = Math.random() * cappedDelay * 0.25;
+    return cappedDelay + jitter;
+  }
+
   private processNext(): void {
     if (!this.handler || this.queue.length === 0) return;
 
-    const job = this.queue.shift();
+    // Find the first job that is ready to process (respects retryAfter backoff)
+    const now = Date.now();
+    const readyIndex = this.queue.findIndex(
+      (j) => !j.retryAfter || j.retryAfter.getTime() <= now,
+    );
+    if (readyIndex === -1) return; // All jobs are waiting for retry backoff
+
+    const job = this.queue.splice(readyIndex, 1)[0];
     if (!job) return;
 
     const tracked = this.tracked.get(job.id);
@@ -270,11 +308,18 @@ export class InMemoryJobQueue implements JobQueue {
       }
 
       if (job.attempts < job.maxAttempts) {
+        // Exponential backoff: baseDelay × 2^(attempt-1), capped at maxDelay, plus jitter
+        const delayMs = this.computeRetryDelay(job.attempts);
+        job.retryAfter = delayMs > 0 ? new Date(Date.now() + delayMs) : undefined;
         this.queue.push(job);
-        if (tracked) tracked.status = "pending";
+        if (tracked) {
+          tracked.status = "pending";
+          tracked.retryAfter = job.retryAfter;
+        }
+        const delayInfo = delayMs > 0 ? `, retrying in ${Math.round(delayMs)}ms` : "";
         console.error(
           `[JobQueue] Job ${job.id} (${job.payload.type}) failed attempt ` +
-            `${job.attempts}/${job.maxAttempts}: ${errorMessage}`,
+            `${job.attempts}/${job.maxAttempts}${delayInfo}: ${errorMessage}`,
         );
       } else {
         if (tracked) tracked.status = "dead";

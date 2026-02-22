@@ -50,6 +50,10 @@ export interface ProposalGenerationResult {
 export interface GenerationOptions {
   /** Maximum number of attempts (default: 2 — initial + one retry on parse failure). */
   maxAttempts?: number;
+  /** Maximum API call retries per LLM invocation on transient errors (default: 3). */
+  apiMaxRetries?: number;
+  /** Base delay in ms for API retry exponential backoff (default: 1000). Set to 0 in tests. */
+  apiRetryBaseDelayMs?: number;
 }
 
 /** Result of storing proposals for a pair. */
@@ -90,6 +94,8 @@ export async function generateProposalsForPair(
   options: GenerationOptions = {},
 ): Promise<ProposalGenerationResult> {
   const maxAttempts = options.maxAttempts ?? 2;
+  const apiMaxRetries = options.apiMaxRetries ?? 3;
+  const apiRetryBaseDelayMs = options.apiRetryBaseDelayMs ?? 1000;
   const systemMessage = getMatchingSystemMessage();
   const userMessage = buildMatchingUserMessage(pairContext.input);
 
@@ -98,7 +104,16 @@ export async function generateProposalsForPair(
   ];
 
   // --- First attempt ---
-  const firstResponse = await callClaude(client, systemMessage, messages);
+  // callClaudeWithRetry handles transient API errors (rate limits, server errors)
+  // with exponential backoff per spec: "LLM call fails → Retry with exponential
+  // backoff, max 3 attempts"
+  const firstResponse = await callClaudeWithRetry(
+    client,
+    systemMessage,
+    messages,
+    apiMaxRetries,
+    apiRetryBaseDelayMs,
+  );
   const firstText = extractTextContent(firstResponse);
 
   const existingProposals = pairContext.input.existingProposals;
@@ -113,7 +128,13 @@ export async function generateProposalsForPair(
       messages.push({ role: "assistant", content: firstText });
       messages.push({ role: "user", content: retryPrompt });
 
-      const retryResponse = await callClaude(client, systemMessage, messages);
+      const retryResponse = await callClaudeWithRetry(
+        client,
+        systemMessage,
+        messages,
+        apiMaxRetries,
+        apiRetryBaseDelayMs,
+      );
       const retryText = extractTextContent(retryResponse);
 
       try {
@@ -299,6 +320,47 @@ export async function storeProposalsAndResult(
 
 // --- Internal helpers ---
 
+/** Promise-based delay for exponential backoff. */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Determines if an error from the LLM API call is retryable (transient).
+ *
+ * Retryable: rate limits (429), server errors (5xx), timeouts (408),
+ * overloaded (529), network/connection errors.
+ * Non-retryable: authentication (401), permission (403), bad request (400).
+ *
+ * Works with Anthropic SDK APIError (which has a `status` property) and
+ * generic network/connection errors.
+ */
+export function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  // Anthropic SDK APIError and subclasses expose a numeric `status` property
+  const status = (error as { status?: number }).status;
+  if (typeof status === "number") {
+    // 408=timeout, 429=rate limit, 529=overloaded, 5xx=server errors
+    return status === 408 || status === 429 || status >= 500;
+  }
+
+  // Network/connection errors have no HTTP status — always retryable
+  const name = error.name;
+  if (name === "APIConnectionError" || name === "APITimeoutError") {
+    return true;
+  }
+
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes("econnrefused") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("fetch failed") ||
+    msg.includes("socket hang up")
+  );
+}
+
 /**
  * Calls the Claude API with the given messages and matching model configuration.
  */
@@ -314,6 +376,70 @@ async function callClaude(
     system: systemMessage,
     messages,
   });
+}
+
+/**
+ * Calls Claude with retry and exponential backoff for transient errors.
+ *
+ * Per spec (matching-engine.md): "LLM call fails → Retry with exponential
+ * backoff, max 3 attempts."
+ *
+ * Retries only on transient errors (rate limits, server errors, network issues).
+ * Non-retryable errors (auth, bad request) propagate immediately.
+ *
+ * Backoff schedule: base × 2^(attempt-1) with 0–25% jitter (default base: 1s).
+ *
+ * @param client - Anthropic SDK client instance.
+ * @param systemMessage - The system prompt.
+ * @param messages - The conversation messages.
+ * @param maxRetries - Maximum total attempts (default: 3).
+ * @param baseDelayMs - Base delay for exponential backoff (default: 1000ms). Set to 0 in tests.
+ * @returns The Claude API response.
+ * @throws The last error if all retries are exhausted or a non-retryable error occurs.
+ */
+async function callClaudeWithRetry(
+  client: Anthropic,
+  systemMessage: string,
+  messages: Anthropic.MessageParam[],
+  maxRetries: number = 3,
+  baseDelayMs: number = 1000,
+): Promise<Anthropic.Message> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await callClaude(client, systemMessage, messages);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      // Don't retry non-retryable errors or on last attempt
+      if (attempt === maxRetries || !isRetryableError(err)) {
+        throw lastError;
+      }
+
+      // Exponential backoff: base × 2^(attempt-1) with 0–25% jitter
+      if (baseDelayMs > 0) {
+        const exponentialDelay = baseDelayMs * Math.pow(2, attempt - 1);
+        const jitter = Math.random() * exponentialDelay * 0.25;
+        const waitMs = exponentialDelay + jitter;
+
+        console.warn(
+          `[MatchingEngine] LLM call attempt ${attempt}/${maxRetries} failed ` +
+            `(${lastError.message}). Retrying in ${Math.round(waitMs)}ms...`,
+        );
+
+        await delay(waitMs);
+      } else {
+        console.warn(
+          `[MatchingEngine] LLM call attempt ${attempt}/${maxRetries} failed ` +
+            `(${lastError.message}). Retrying immediately...`,
+        );
+      }
+    }
+  }
+
+  // Should not reach here, but TypeScript needs the throw
+  throw lastError!;
 }
 
 /**

@@ -31,6 +31,7 @@ import {
   generateProposalsForPair,
   storeProposalsAndResult,
   extractTextContent,
+  isRetryableError,
 } from "../matching-engine";
 import type { PairContext } from "@/services/matching-context";
 import type { ProposalOutput } from "@/lib/matching-engine-prompt";
@@ -479,10 +480,10 @@ describe("matching-engine service", () => {
     });
 
     /**
-     * Network/auth errors from the Anthropic SDK should propagate
-     * without being caught by the service.
+     * Non-retryable errors (auth, bad request) from the Anthropic SDK
+     * should propagate immediately without retrying.
      */
-    it("propagates API errors from the Anthropic client", async () => {
+    it("propagates non-retryable API errors immediately", async () => {
       const createSpy = jest
         .fn()
         .mockRejectedValue(new Error("Authentication failed"));
@@ -493,20 +494,31 @@ describe("matching-engine service", () => {
       await expect(
         generateProposalsForPair(client, makeTestPairContext()),
       ).rejects.toThrow("Authentication failed");
+
+      // Non-retryable error: should only call API once (no retry)
+      expect(createSpy).toHaveBeenCalledTimes(1);
     });
 
-    /** Rate limit errors should propagate without being caught. */
-    it("propagates rate limit errors", async () => {
+    /**
+     * Non-retryable errors propagate even when apiMaxRetries > 1,
+     * because isRetryableError returns false for generic errors.
+     */
+    it("does not retry non-retryable errors regardless of apiMaxRetries", async () => {
       const createSpy = jest
         .fn()
-        .mockRejectedValue(new Error("Rate limit exceeded"));
+        .mockRejectedValue(new Error("Bad request: invalid model"));
       const client = {
         messages: { create: createSpy },
       } as unknown as Anthropic;
 
       await expect(
-        generateProposalsForPair(client, makeTestPairContext()),
-      ).rejects.toThrow("Rate limit exceeded");
+        generateProposalsForPair(client, makeTestPairContext(), {
+          apiMaxRetries: 3,
+        }),
+      ).rejects.toThrow("Bad request: invalid model");
+
+      // Should not retry non-retryable errors
+      expect(createSpy).toHaveBeenCalledTimes(1);
     });
 
     /**
@@ -1016,6 +1028,229 @@ describe("matching-engine service", () => {
       ];
       expect(() => extractTextContent(response)).toThrow(
         "no text content blocks",
+      );
+    });
+  });
+
+  describe("isRetryableError", () => {
+    /** Rate limit errors (HTTP 429) are retryable. */
+    it("returns true for rate limit errors (status 429)", () => {
+      const err = Object.assign(new Error("Rate limit exceeded"), {
+        status: 429,
+      });
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    /** Server errors (HTTP 500) are retryable. */
+    it("returns true for server errors (status 500)", () => {
+      const err = Object.assign(new Error("Internal server error"), {
+        status: 500,
+      });
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    /** Overloaded errors (HTTP 529) are retryable. */
+    it("returns true for overloaded errors (status 529)", () => {
+      const err = Object.assign(new Error("Overloaded"), { status: 529 });
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    /** Timeout errors (HTTP 408) are retryable. */
+    it("returns true for timeout errors (status 408)", () => {
+      const err = Object.assign(new Error("Request timeout"), { status: 408 });
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    /** Auth errors (HTTP 401) are NOT retryable. */
+    it("returns false for auth errors (status 401)", () => {
+      const err = Object.assign(new Error("Unauthorized"), { status: 401 });
+      expect(isRetryableError(err)).toBe(false);
+    });
+
+    /** Bad request errors (HTTP 400) are NOT retryable. */
+    it("returns false for bad request errors (status 400)", () => {
+      const err = Object.assign(new Error("Bad request"), { status: 400 });
+      expect(isRetryableError(err)).toBe(false);
+    });
+
+    /** Network connection errors (by name) are retryable. */
+    it("returns true for APIConnectionError by name", () => {
+      const err = new Error("Connection failed");
+      err.name = "APIConnectionError";
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    /** Timeout errors by name are retryable. */
+    it("returns true for APITimeoutError by name", () => {
+      const err = new Error("Request timed out");
+      err.name = "APITimeoutError";
+      expect(isRetryableError(err)).toBe(true);
+    });
+
+    /** ECONNREFUSED in error message indicates network failure — retryable. */
+    it("returns true for ECONNREFUSED errors", () => {
+      expect(isRetryableError(new Error("connect ECONNREFUSED 127.0.0.1:443"))).toBe(true);
+    });
+
+    /** fetch failed errors are retryable. */
+    it("returns true for fetch failed errors", () => {
+      expect(isRetryableError(new Error("fetch failed"))).toBe(true);
+    });
+
+    /** Generic errors without status or network indicators are NOT retryable. */
+    it("returns false for generic errors", () => {
+      expect(isRetryableError(new Error("Something went wrong"))).toBe(false);
+    });
+
+    /** Non-Error values are NOT retryable. */
+    it("returns false for non-Error values", () => {
+      expect(isRetryableError("string error")).toBe(false);
+      expect(isRetryableError(42)).toBe(false);
+      expect(isRetryableError(null)).toBe(false);
+    });
+  });
+
+  describe("callClaudeWithRetry (via generateProposalsForPair)", () => {
+    beforeEach(() => {
+      jest.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    /**
+     * Retryable errors (rate limit) should be retried up to apiMaxRetries.
+     * After all retries fail, the error propagates.
+     * Per spec: "LLM call fails → Retry with exponential backoff, max 3 attempts."
+     * Uses apiRetryBaseDelayMs: 0 to skip delays in tests.
+     */
+    it("retries retryable errors up to apiMaxRetries", async () => {
+      const rateLimitErr = Object.assign(
+        new Error("Rate limit exceeded"),
+        { status: 429 },
+      );
+      const createSpy = jest.fn().mockRejectedValue(rateLimitErr);
+      const client = {
+        messages: { create: createSpy },
+      } as unknown as Anthropic;
+
+      await expect(
+        generateProposalsForPair(client, makeTestPairContext(), {
+          apiMaxRetries: 3,
+          apiRetryBaseDelayMs: 0,
+        }),
+      ).rejects.toThrow("Rate limit exceeded");
+
+      // Should have made 3 total API calls (initial + 2 retries)
+      expect(createSpy).toHaveBeenCalledTimes(3);
+    });
+
+    /**
+     * Server errors (status 500) are retryable — the function should retry
+     * before propagating the error.
+     */
+    it("retries server errors (status 500)", async () => {
+      const serverErr = Object.assign(
+        new Error("Internal server error"),
+        { status: 500 },
+      );
+      const createSpy = jest.fn().mockRejectedValue(serverErr);
+      const client = {
+        messages: { create: createSpy },
+      } as unknown as Anthropic;
+
+      await expect(
+        generateProposalsForPair(client, makeTestPairContext(), {
+          apiMaxRetries: 2,
+          apiRetryBaseDelayMs: 0,
+        }),
+      ).rejects.toThrow("Internal server error");
+
+      expect(createSpy).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * When a retryable error occurs on the first attempt but succeeds on
+     * retry, the proposals should be returned normally.
+     */
+    it("returns proposals when retryable error recovers on retry", async () => {
+      const proposals = [makeValidProposal()];
+      const rateLimitErr = Object.assign(
+        new Error("Rate limit exceeded"),
+        { status: 429 },
+      );
+      const createSpy = jest
+        .fn()
+        .mockRejectedValueOnce(rateLimitErr)
+        .mockResolvedValueOnce(makeMockResponse(JSON.stringify(proposals)));
+      const client = {
+        messages: { create: createSpy },
+      } as unknown as Anthropic;
+
+      const result = await generateProposalsForPair(
+        client,
+        makeTestPairContext(),
+        { apiMaxRetries: 3, apiRetryBaseDelayMs: 0 },
+      );
+
+      expect(result.proposals).toHaveLength(1);
+      expect(result.proposals[0]!.title).toBe(proposals[0]!.title);
+      expect(createSpy).toHaveBeenCalledTimes(2);
+    });
+
+    /**
+     * With apiMaxRetries=1, no retry happens and the error propagates
+     * immediately (even for retryable errors).
+     */
+    it("does not retry when apiMaxRetries is 1", async () => {
+      const serverErr = Object.assign(
+        new Error("Internal server error"),
+        { status: 500 },
+      );
+      const createSpy = jest.fn().mockRejectedValue(serverErr);
+      const client = {
+        messages: { create: createSpy },
+      } as unknown as Anthropic;
+
+      await expect(
+        generateProposalsForPair(client, makeTestPairContext(), {
+          apiMaxRetries: 1,
+        }),
+      ).rejects.toThrow("Internal server error");
+
+      expect(createSpy).toHaveBeenCalledTimes(1);
+    });
+
+    /**
+     * Logs a warning message for each retry attempt, including the error
+     * message and attempt number, which aids debugging in production.
+     */
+    it("logs warning on each retry attempt", async () => {
+      const warnSpy = console.warn as jest.Mock;
+      const rateLimitErr = Object.assign(
+        new Error("Rate limit exceeded"),
+        { status: 429 },
+      );
+      const createSpy = jest.fn().mockRejectedValue(rateLimitErr);
+      const client = {
+        messages: { create: createSpy },
+      } as unknown as Anthropic;
+
+      await expect(
+        generateProposalsForPair(client, makeTestPairContext(), {
+          apiMaxRetries: 3,
+          apiRetryBaseDelayMs: 0,
+        }),
+      ).rejects.toThrow();
+
+      // Should have logged a warning for attempts 1 and 2 (not 3, since that throws)
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("attempt 1/3"),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("attempt 2/3"),
       );
     });
   });
