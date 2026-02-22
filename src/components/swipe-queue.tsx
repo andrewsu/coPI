@@ -391,7 +391,7 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
 }
 
 /** A single proposal summary card — scannable in 10-15 seconds per spec. */
-function ProposalSummaryCard({
+export function ProposalSummaryCard({
   proposal,
   isExpanded,
   onToggleDetail,

@@ -75,7 +75,7 @@
 - [x] Implement "Interested" swipe action with match detection
 - [x] Implement "Archive" swipe action
 - [x] Implement visibility state transitions (pending_other_interest → visible on interested swipe)
-- [ ] Build archive tab (view archived proposals, move back to interested)
+- [x] Build archive tab (view archived proposals, move back to interested)
 - [ ] Build matches tab (full proposal, profiles, contact info per email_visibility setting)
 - [ ] Implement empty states for all tabs
 - [ ] Implement periodic survey (every Nth archive, multi-select failure modes)

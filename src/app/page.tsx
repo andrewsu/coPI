@@ -13,7 +13,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SignOutButton } from "@/components/sign-out-button";
-import { SwipeQueue } from "@/components/swipe-queue";
+import { ProposalTabs } from "@/components/proposal-tabs";
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
@@ -78,9 +78,9 @@ export default async function HomePage() {
         </div>
       </header>
 
-      {/* Swipe Queue */}
+      {/* Proposal Queue & Archive */}
       <div className="mx-auto max-w-3xl px-4 py-8">
-        <SwipeQueue hasMatchPool={hasMatchPool} />
+        <ProposalTabs hasMatchPool={hasMatchPool} />
       </div>
     </main>
   );
