@@ -80,7 +80,7 @@ export default function OnboardingPage() {
         });
         const data = (await res.json()) as { status: string };
         if (data.status === "already_exists" && active) {
-          router.replace("/");
+          router.replace("/onboarding/review");
         }
       } catch {
         // Pipeline start failure will be caught by status polling
@@ -92,9 +92,9 @@ export default function OnboardingPage() {
       const initial = await fetchStatus();
       if (!active) return;
 
-      // Already has a profile — redirect to home
+      // Already has a profile — redirect to review page
       if (initial?.hasProfile) {
-        router.replace("/");
+        router.replace("/onboarding/review");
         return;
       }
 
@@ -120,9 +120,9 @@ export default function OnboardingPage() {
         setStatus(data);
 
         if (data.stage === "complete") {
-          // Brief delay to show completion state, then redirect
+          // Brief delay to show completion state, then redirect to review
           await new Promise((r) => setTimeout(r, 2500));
-          if (active) router.replace("/");
+          if (active) router.replace("/onboarding/review");
           break;
         }
         if (data.stage === "error") {

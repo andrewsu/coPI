@@ -31,7 +31,7 @@
 - [x] Implement profile validation (word count, minimum fields)
 - [x] Implement full pipeline orchestration (ORCID → PubMed → synthesis → store)
 - [x] Build onboarding UI: profile generation progress indicator
-- [ ] Build onboarding UI: profile review/edit page
+- [x] Build onboarding UI: profile review/edit page
 - [ ] Build profile edit page (direct editing of all synthesized fields)
 - [ ] Build user-submitted text management UI (add/edit/delete, max 5)
 - [ ] Implement profile refresh (manual trigger)
