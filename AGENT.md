@@ -169,6 +169,8 @@ npm run type-check
 
 26. **Eligible pair computation:** `src/services/eligible-pairs.ts` implements `computeEligiblePairs(prisma, options?)` which determines which researcher pairs should receive collaboration proposals. Takes an injected PrismaClient for testability. Eligibility rules per spec: mutual selection → both `visible`; one-sided with `allow_incoming_proposals` → selector `visible`, other `pending_other_interest`; neither → skip. Filters out pairs already evaluated at the same profile versions via MatchingResult records. Both researchers must have a ResearcherProfile. Supports `forUserId` option to scope computation to pairs involving one user (for event-driven triggers). Uses `orderUserIds()` from `src/lib/utils.ts` to maintain the A < B UUID convention. Returns `EligiblePair[]` with ordered IDs, visibility states, and profile versions.
 
+27. **Matching context assembly service:** `src/services/matching-context.ts` bridges eligible pair computation and the LLM prompt builder by fetching researcher data (User + ResearcherProfile + Publications) from the database and converting it to `MatchingInput` format. Provides `assembleContextForPair()` for single pairs and `assembleContextForPairs()` for batch processing with error reporting. Fetches existing CollaborationProposals for de-duplication context. Exports `parseUserSubmittedTexts()` (replicated from profile-pipeline.ts) to avoid circular dependencies between services. Uses injected PrismaClient for testability. Maps nullable `department` to optional field in `ResearcherContext`. Returns `BatchContextResult` containing both successful contexts and error details for failed pairs.
+
 ## Specifications
 
 All specs are in the `specs/` directory. READ THEM before making changes:

@@ -57,8 +57,8 @@
 - [x] Build matching engine LLM prompt with few-shot examples (store in prompts/matching-engine.md)
 - [x] Implement eligible pair computation (mutual selection + incoming logic)
 - [x] Implement visibility assignment logic
-- [ ] Implement context assembly per pair (profiles, abstracts, existing proposals)
-- [ ] Implement abstract selection (up to 10 per researcher, prioritized by author position/recency/type)
+- [x] Implement context assembly per pair (profiles, abstracts, existing proposals)
+- [x] Implement abstract selection (up to 10 per researcher, prioritized by author position/recency/type)
 - [ ] Implement LLM call with structured JSON output parsing
 - [ ] Implement output validation (required fields, discard invalid)
 - [ ] Implement de-duplication against existing proposals
