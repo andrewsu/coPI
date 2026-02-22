@@ -71,7 +71,7 @@
 
 - [x] Build swipe queue page with card UI
 - [x] Implement summary card (collaborator info, type, one-line summary, confidence indicator)
-- [ ] Implement detail expansion (rationale, contributions, benefits, first experiment, publications)
+- [x] Implement detail expansion (rationale, contributions, benefits, first experiment, publications)
 - [ ] Implement "Interested" swipe action with match detection
 - [ ] Implement "Archive" swipe action
 - [ ] Implement visibility state transitions (pending_other_interest → visible on interested swipe)
