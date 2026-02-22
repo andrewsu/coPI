@@ -25,7 +25,7 @@
 - [x] Implement ORCID API client (fetch profile, grants, works)
 - [x] Implement PubMed API client (fetch abstracts by PMID, batch)
 - [ ] Implement PMC client for deep mining (methods section extraction)
-- [ ] Implement NCBI ID converter client (PMID ↔ PMCID)
+- [x] Implement NCBI ID converter client (PMID ↔ PMCID)
 - [ ] Build profile synthesis LLM prompt (store in prompts/profile-synthesis.md)
 - [ ] Implement profile synthesis service (assemble context, call Claude, parse output)
 - [ ] Implement profile validation (word count, minimum fields)
@@ -118,3 +118,6 @@
 - Phase 5 depends on Phase 3 (profiles) and Phase 4 (match pools).
 - Phase 6 depends on Phase 5 (proposals to display).
 - Phase 7 can be partially developed in parallel with Phase 6.
+- PubMed client (`pubmed.ts`) does not send `tool` or `email` parameters on E-utilities requests, unlike the ID converter. Should be harmonized per NCBI API guidelines.
+- Neither the PubMed client nor the NCBI ID converter implement retry/backoff for rate limiting (429). The pipeline orchestration step should add a shared rate-limiting/retry layer for all NCBI API calls.
+- Sequential batch processing in both NCBI clients lacks inter-batch delays, which risks rate limiting for researchers with many publications (400+). Address during pipeline orchestration.

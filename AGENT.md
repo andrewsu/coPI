@@ -43,7 +43,7 @@ copi/
 - Docker and Docker Compose
 - ORCID OAuth credentials (for auth testing)
 - Anthropic API key (for LLM features)
-- NCBI API key (for PubMed, optional but recommended)
+- NCBI API key (for PubMed and PMC ID Converter, optional but recommended)
 
 ### Local Development
 
