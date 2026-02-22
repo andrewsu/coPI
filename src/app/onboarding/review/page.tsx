@@ -94,9 +94,9 @@ export default function ProfileReviewPage() {
   const handleContinue = useCallback(async () => {
     if (!profile) return;
 
-    // If nothing changed, just proceed
+    // If nothing changed, just proceed to match pool setup
     if (!dirty) {
-      router.push("/");
+      router.push("/match-pool?onboarding=1");
       return;
     }
 
@@ -128,7 +128,7 @@ export default function ProfileReviewPage() {
         throw new Error("Failed to save profile");
       }
 
-      router.push("/");
+      router.push("/match-pool?onboarding=1");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile");
     } finally {

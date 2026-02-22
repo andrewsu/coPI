@@ -40,7 +40,7 @@
 
 ## Phase 4: Match Pool
 
-- [ ] Build match pool management page
+- [x] Build match pool management page
 - [ ] Implement user search (by name, institution)
 - [ ] Implement profile preview in search results (excluding user-submitted texts)
 - [ ] Implement individual user selection (add/remove from match pool)
@@ -49,8 +49,8 @@
 - [ ] Implement match pool cap logic (200 cap, priority ordering)
 - [ ] Store AffiliationSelection records
 - [ ] Auto-expand match pools when new users join (check affiliation selections and all-users flags)
-- [ ] Build match pool view (show who's in it, how added, remove option)
-- [ ] Enforce match pool setup as required step before showing main app
+- [x] Build match pool view (show who's in it, how added, remove option)
+- [x] Enforce match pool setup as required step before showing main app
 
 ## Phase 5: Matching Engine
 
