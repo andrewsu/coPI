@@ -12,13 +12,13 @@
 
 ## Phase 2: Authentication
 
-- [ ] Configure ORCID OAuth 2.0 (using next-auth or custom)
-- [ ] Implement login page with "Sign in with ORCID" button
-- [ ] Handle first-time login (create User record from ORCID data)
-- [ ] Handle returning login (match existing User by ORCID ID)
-- [ ] Handle seeded profile claiming (match seeded User record)
-- [ ] Implement session management with secure cookies
-- [ ] Protect all routes except login
+- [x] Configure ORCID OAuth 2.0 (using next-auth or custom)
+- [x] Implement login page with "Sign in with ORCID" button
+- [x] Handle first-time login (create User record from ORCID data)
+- [x] Handle returning login (match existing User by ORCID ID)
+- [x] Handle seeded profile claiming (match seeded User record)
+- [x] Implement session management with secure cookies
+- [x] Protect all routes except login
 
 ## Phase 3: Profile Pipeline
 

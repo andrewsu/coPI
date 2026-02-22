@@ -110,6 +110,7 @@ npm run type-check
    ```
 4. **Runtime versions:** Node v20.20.0, npm 10.8.2.
 5. **ts-node is required** as a devDependency for Jest TypeScript config (`jest.config.ts`).
+6. **next-auth v4** is used with the JWT session strategy. Session augmentation types are in `src/types/next-auth.d.ts`.
 
 ## Key Design Decisions
 
@@ -120,6 +121,9 @@ npm run type-check
 5. **Matching engine uses Claude Opus.** Prompts are in `prompts/` directory.
 6. **Proposals can be multiple per pair** but max 3 per LLM call.
 7. **No bias signals in swipe UI.** Users don't see if the other party swiped.
+8. **ORCID OAuth uses next-auth v4** with a custom provider. The config is in `src/lib/auth.ts`. ORCID's token endpoint returns `orcid` and `name` directly in the token response (non-standard). The custom token handler captures these fields and passes them to the userinfo handler which fetches full profile (email, institution) from the ORCID API.
+9. **Member vs Public ORCID API**: When an access token is provided (from OAuth with /read-limited scope), the member API (api.orcid.org) is used. Without a token, the public API (pub.orcid.org) is used. Sandbox mode is toggled via `ORCID_SANDBOX=true` env var.
+10. **Route protection** is handled by next-auth middleware (`src/middleware.ts`). All routes except `/login`, `/api/auth/*`, and static assets require authentication.
 
 ## Specifications
 
