@@ -23,7 +23,7 @@
 ## Phase 3: Profile Pipeline
 
 - [x] Implement ORCID API client (fetch profile, grants, works)
-- [ ] Implement PubMed API client (fetch abstracts by PMID, batch)
+- [x] Implement PubMed API client (fetch abstracts by PMID, batch)
 - [ ] Implement PMC client for deep mining (methods section extraction)
 - [ ] Implement NCBI ID converter client (PMID ↔ PMCID)
 - [ ] Build profile synthesis LLM prompt (store in prompts/profile-synthesis.md)

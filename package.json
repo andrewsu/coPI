@@ -19,6 +19,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@prisma/client": "^6.3.0",
+    "fast-xml-parser": "^5.3.7",
     "next": "^15.1.0",
     "next-auth": "^4.24.0",
     "react": "^19.0.0",
