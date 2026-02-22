@@ -73,6 +73,12 @@ export default async function HomePage() {
             >
               Match Pool
             </Link>
+            <Link
+              href="/settings"
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
+              Settings
+            </Link>
             <SignOutButton />
           </div>
         </div>
