@@ -131,6 +131,8 @@ npm run type-check
 9. **Member vs Public ORCID API**: When an access token is provided (from OAuth with /read-limited scope), the member API (api.orcid.org) is used. Without a token, the public API (pub.orcid.org) is used. Sandbox mode is toggled via `ORCID_SANDBOX=true` env var.
 10. **Route protection** is handled by next-auth middleware (`src/middleware.ts`). All routes except `/login`, `/api/auth/*`, and static assets require authentication.
 
+11. **LLM prompt architecture:** Each LLM prompt has two parts: (a) a markdown file in `prompts/` documenting the prompt design, validation rules, and implementation notes; (b) a TypeScript module in `src/lib/` (e.g., `profile-synthesis-prompt.ts`) providing functions to assemble the user message from input data, parse LLM output (handling code fences, trailing commas, deduplication), validate output against field requirements, and generate retry prompts when validation fails. The service layer in `src/services/` uses these modules to make the actual LLM API calls.
+
 ## Specifications
 
 All specs are in the `specs/` directory. READ THEM before making changes:

@@ -26,7 +26,7 @@
 - [x] Implement PubMed API client (fetch abstracts by PMID, batch)
 - [x] Implement PMC client for deep mining (methods section extraction)
 - [x] Implement NCBI ID converter client (PMID ↔ PMCID)
-- [ ] Build profile synthesis LLM prompt (store in prompts/profile-synthesis.md)
+- [x] Build profile synthesis LLM prompt (store in prompts/profile-synthesis.md)
 - [ ] Implement profile synthesis service (assemble context, call Claude, parse output)
 - [ ] Implement profile validation (word count, minimum fields)
 - [ ] Implement full pipeline orchestration (ORCID → PubMed → synthesis → store)
