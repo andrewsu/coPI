@@ -100,6 +100,17 @@ npm run lint
 npm run type-check
 ```
 
+## Environment Notes
+
+1. **WSL2 (Ubuntu 24.04).** This project runs inside WSL2, not native Windows.
+2. **Docker via Docker Desktop.** Use `docker.exe` (Docker Desktop on Windows with WSL integration), not `docker` directly.
+3. **Node.js via nvm.** Node is installed through nvm, not the Windows Node. All npm/node commands must source nvm first:
+   ```bash
+   export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+   ```
+4. **Runtime versions:** Node v20.20.0, npm 10.8.2.
+5. **ts-node is required** as a devDependency for Jest TypeScript config (`jest.config.ts`).
+
 ## Key Design Decisions
 
 1. **ORCID OAuth is the only auth method.** No email/password.

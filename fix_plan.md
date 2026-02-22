@@ -2,13 +2,13 @@
 
 ## Phase 1: Foundation
 
-- [ ] Initialize Next.js project with TypeScript and Tailwind CSS
-- [ ] Set up Docker Compose with PostgreSQL
-- [ ] Define Prisma schema matching specs/data-model.md
-- [ ] Run initial migration
-- [ ] Set up ESLint and TypeScript strict mode
-- [ ] Create .env.example with all required environment variables
-- [ ] Set up basic project structure (app/, components/, lib/, services/, worker/)
+- [x] Initialize Next.js project with TypeScript and Tailwind CSS
+- [x] Set up Docker Compose with PostgreSQL
+- [x] Define Prisma schema matching specs/data-model.md
+- [x] Run initial migration
+- [x] Set up ESLint and TypeScript strict mode
+- [x] Create .env.example with all required environment variables
+- [x] Set up basic project structure (app/, components/, lib/, services/, worker/)
 
 ## Phase 2: Authentication
 

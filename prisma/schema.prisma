@@ -1,0 +1,287 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+
+enum EmailVisibility {
+  public_profile
+  mutual_matches
+  never
+}
+
+enum AuthorPosition {
+  first
+  last
+  middle
+}
+
+enum MatchPoolSource {
+  individual_select
+  affiliation_select
+  all_users
+}
+
+enum ConfidenceTier {
+  high
+  moderate
+  speculative
+}
+
+enum ProposalVisibility {
+  visible
+  pending_other_interest
+  hidden
+}
+
+enum SwipeDirection {
+  interested
+  archive
+}
+
+enum MatchingOutcome {
+  proposals_generated
+  no_proposal
+}
+
+// --- Models ---
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  name      String
+  institution String
+  department  String?
+  orcid     String   @unique
+
+  allowIncomingProposals    Boolean @default(false) @map("allow_incoming_proposals")
+  emailVisibility           EmailVisibility @default(mutual_matches) @map("email_visibility")
+  emailNotificationsEnabled Boolean @default(true) @map("email_notifications_enabled")
+  notifyMatches             Boolean @default(true) @map("notify_matches")
+  notifyNewProposals        Boolean @default(true) @map("notify_new_proposals")
+  notifyProfileRefresh      Boolean @default(true) @map("notify_profile_refresh")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profile      ResearcherProfile?
+  publications Publication[]
+
+  // Match pool: entries where this user selected others
+  matchPoolSelections MatchPoolEntry[] @relation("selector")
+  // Match pool: entries where others selected this user
+  matchPoolTargets    MatchPoolEntry[] @relation("target")
+
+  affiliationSelections AffiliationSelection[]
+
+  // Proposals where this user is researcher A (lower UUID)
+  proposalsAsA CollaborationProposal[] @relation("researcherA")
+  // Proposals where this user is researcher B (higher UUID)
+  proposalsAsB CollaborationProposal[] @relation("researcherB")
+
+  swipes          Swipe[]
+  surveyResponses SurveyResponse[]
+
+  // MatchingResults where this user is researcher A
+  matchingResultsAsA MatchingResult[] @relation("matchingResearcherA")
+  // MatchingResults where this user is researcher B
+  matchingResultsAsB MatchingResult[] @relation("matchingResearcherB")
+
+  @@map("users")
+}
+
+model ResearcherProfile {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  researchSummary    String   @map("research_summary") @db.Text
+  techniques         String[]
+  experimentalModels String[] @map("experimental_models")
+  diseaseAreas       String[] @map("disease_areas")
+  keyTargets         String[] @map("key_targets")
+  keywords           String[]
+  grantTitles        String[] @map("grant_titles")
+
+  // Array of {label, content, submitted_at} — max 5 entries, each max 2000 words
+  userSubmittedTexts Json? @map("user_submitted_texts") @db.JsonB
+
+  profileVersion    Int      @default(1) @map("profile_version")
+  profileGeneratedAt DateTime? @map("profile_generated_at")
+  rawAbstractsHash  String?  @map("raw_abstracts_hash")
+
+  // Pending profile update from monthly refresh
+  pendingProfile          Json?     @map("pending_profile") @db.JsonB
+  pendingProfileCreatedAt DateTime? @map("pending_profile_created_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("researcher_profiles")
+}
+
+model Publication {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  pmid  String? @map("pmid")
+  pmcid String? @map("pmcid")
+  doi   String? @map("doi")
+
+  title    String @db.Text
+  abstract String @db.Text
+  journal  String
+  year     Int
+
+  authorPosition AuthorPosition @map("author_position")
+  methodsText    String?        @map("methods_text") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("publications")
+}
+
+model MatchPoolEntry {
+  id           String @id @default(uuid()) @db.Uuid
+  userId       String @map("user_id") @db.Uuid
+  targetUserId String @map("target_user_id") @db.Uuid
+
+  user       User @relation("selector", fields: [userId], references: [id], onDelete: Cascade)
+  targetUser User @relation("target", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  source MatchPoolSource
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, targetUserId])
+  @@map("match_pool_entries")
+}
+
+model AffiliationSelection {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  institution String?
+  department  String?
+  selectAll   Boolean @default(false) @map("select_all")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("affiliation_selections")
+}
+
+model CollaborationProposal {
+  id             String @id @default(uuid()) @db.Uuid
+  researcherAId  String @map("researcher_a_id") @db.Uuid
+  researcherBId  String @map("researcher_b_id") @db.Uuid
+
+  researcherA User @relation("researcherA", fields: [researcherAId], references: [id])
+  researcherB User @relation("researcherB", fields: [researcherBId], references: [id])
+
+  title              String
+  collaborationType  String   @map("collaboration_type")
+  scientificQuestion String   @map("scientific_question") @db.Text
+
+  oneLineSummaryA String @map("one_line_summary_a") @db.Text
+  oneLineSummaryB String @map("one_line_summary_b") @db.Text
+
+  detailedRationale String @map("detailed_rationale") @db.Text
+  labAContributions String @map("lab_a_contributions") @db.Text
+  labBContributions String @map("lab_b_contributions") @db.Text
+  labABenefits      String @map("lab_a_benefits") @db.Text
+  labBBenefits      String @map("lab_b_benefits") @db.Text
+
+  proposedFirstExperiment String @map("proposed_first_experiment") @db.Text
+
+  // References to Publication IDs from either researcher
+  anchoringPublicationIds String[] @map("anchoring_publication_ids") @db.Uuid
+
+  confidenceTier ConfidenceTier @map("confidence_tier")
+  llmReasoning   String         @map("llm_reasoning") @db.Text
+  llmModel       String         @map("llm_model")
+
+  visibilityA ProposalVisibility @map("visibility_a")
+  visibilityB ProposalVisibility @map("visibility_b")
+
+  profileVersionA Int @map("profile_version_a")
+  profileVersionB Int @map("profile_version_b")
+
+  isUpdated Boolean @default(false) @map("is_updated")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  swipes  Swipe[]
+  matches Match[]
+
+  @@map("collaboration_proposals")
+}
+
+model Swipe {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+  proposalId String @map("proposal_id") @db.Uuid
+
+  user     User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  proposal CollaborationProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  direction    SwipeDirection
+  viewedDetail Boolean @default(false) @map("viewed_detail")
+  timeSpentMs  Int?    @map("time_spent_ms")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, proposalId])
+  @@map("swipes")
+}
+
+model Match {
+  id         String @id @default(uuid()) @db.Uuid
+  proposalId String @map("proposal_id") @db.Uuid
+
+  proposal CollaborationProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  notificationSentA Boolean @default(false) @map("notification_sent_a")
+  notificationSentB Boolean @default(false) @map("notification_sent_b")
+
+  matchedAt DateTime @default(now()) @map("matched_at")
+
+  @@map("matches")
+}
+
+model MatchingResult {
+  id             String @id @default(uuid()) @db.Uuid
+  researcherAId  String @map("researcher_a_id") @db.Uuid
+  researcherBId  String @map("researcher_b_id") @db.Uuid
+
+  researcherA User @relation("matchingResearcherA", fields: [researcherAId], references: [id])
+  researcherB User @relation("matchingResearcherB", fields: [researcherBId], references: [id])
+
+  outcome MatchingOutcome
+
+  profileVersionA Int @map("profile_version_a")
+  profileVersionB Int @map("profile_version_b")
+
+  evaluatedAt DateTime @default(now()) @map("evaluated_at")
+
+  @@map("matching_results")
+}
+
+model SurveyResponse {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  failureModes String[] @map("failure_modes")
+  freeText     String?  @map("free_text") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("survey_responses")
+}
