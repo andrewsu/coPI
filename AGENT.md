@@ -116,6 +116,7 @@ npm run type-check
 4. **Runtime versions:** Node v20.20.0, npm 10.8.2.
 5. **ts-node is required** as a devDependency for Jest TypeScript config (`jest.config.ts`).
 6. **next-auth v4** is used with the JWT session strategy. Session augmentation types are in `src/types/next-auth.d.ts`.
+7. **fast-xml-parser** is used to parse PubMed E-utilities XML responses (efetch). Configured with `isArray` for elements that can appear 0-N times (Author, AbstractText, etc.) and `ignoreAttributes: false` to access ArticleId IdType attributes.
 
 ## Key Design Decisions
 
