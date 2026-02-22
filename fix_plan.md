@@ -69,8 +69,8 @@
 
 ## Phase 6: Swipe Interface
 
-- [ ] Build swipe queue page with card UI
-- [ ] Implement summary card (collaborator info, type, one-line summary, confidence indicator)
+- [x] Build swipe queue page with card UI
+- [x] Implement summary card (collaborator info, type, one-line summary, confidence indicator)
 - [ ] Implement detail expansion (rationale, contributions, benefits, first experiment, publications)
 - [ ] Implement "Interested" swipe action with match detection
 - [ ] Implement "Archive" swipe action
@@ -127,3 +127,4 @@
 - Array deduplication in output parsing is case-insensitive but preserves original case of first occurrence. If LLM outputs near-duplicates with different casing, only one is kept silently.
 - Retry prompt includes current error counts but message text may appear identical on repeated failures. Consider logging counts or adding retry attempt number to distinguish iterations.
 - User-submitted text management: the spec requires re-synthesis when texts are added/modified. This trigger should be implemented as part of the "Implement profile refresh (manual trigger)" task. Currently, saving texts only updates the JSONB field; the user must manually refresh their profile for changes to take effect in synthesis.
+- Swipe queue page currently uses Previous/Next navigation buttons as temporary placeholders for browsing proposals. These will be replaced by the actual swipe actions (Interested/Archive) when those Phase 6 items are implemented.
