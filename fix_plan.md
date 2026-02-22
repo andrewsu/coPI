@@ -34,7 +34,7 @@
 - [x] Build onboarding UI: profile review/edit page
 - [x] Build profile edit page (direct editing of all synthesized fields)
 - [x] Build user-submitted text management UI (add/edit/delete, max 5)
-- [ ] Implement profile refresh (manual trigger)
+- [x] Implement profile refresh (manual trigger)
 - [ ] Implement monthly refresh cron job (detect new publications, generate candidate, notify)
 - [ ] Build side-by-side profile comparison UI for refresh candidates
 

@@ -2,11 +2,13 @@
  * Profile edit page — direct editing of all synthesized profile fields.
  *
  * Accessible from the main app after onboarding. Allows users to edit
- * their research profile at any time.
+ * their research profile at any time. Also provides a "Refresh Profile"
+ * button that re-runs the full pipeline (ORCID -> PubMed -> synthesis).
  *
  * Spec reference: auth-and-user-management.md, Profile Management:
  * "Users can view and directly edit all profile fields"
  * "Edits save immediately and bump profile_version"
+ * "User can click 'Refresh profile' to re-run the full pipeline"
  *
  * Editable fields: research summary, techniques, experimental models,
  * disease areas, key targets, keywords.
@@ -19,7 +21,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { TagInput } from "@/components/tag-input";
@@ -43,6 +45,17 @@ interface ProfileData {
   profileGeneratedAt: string;
 }
 
+interface RefreshStatusResponse {
+  stage: string;
+  message: string;
+  warnings: string[];
+  error?: string;
+  result?: {
+    publicationsFound: number;
+    profileCreated: boolean;
+  };
+}
+
 /** Counts words in text using whitespace splitting (mirrors server-side logic). */
 function countWords(text: string): number {
   return text
@@ -50,6 +63,9 @@ function countWords(text: string): number {
     .split(/\s+/)
     .filter((w) => w.length > 0).length;
 }
+
+/** Polling interval for refresh status (ms). */
+const REFRESH_POLL_INTERVAL = 2000;
 
 export default function ProfileEditPage() {
   const { status: sessionStatus } = useSession();
@@ -63,7 +79,15 @@ export default function ProfileEditPage() {
   const [dirty, setDirty] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Fetch profile on mount
+  // Refresh state
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshStage, setRefreshStage] = useState<string | null>(null);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshWarnings, setRefreshWarnings] = useState<string[]>([]);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Fetch profile on mount (inline to avoid unstable router dependency in useCallback)
   useEffect(() => {
     if (sessionStatus !== "authenticated") return;
 
@@ -89,6 +113,30 @@ export default function ProfileEditPage() {
 
     fetchProfile();
   }, [sessionStatus, router]);
+
+  // Cleanup polling timer on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+      }
+    };
+  }, []);
+
+  /** Reload profile from API (used after refresh completes). */
+  const reloadProfile = useCallback(async () => {
+    try {
+      const res = await fetch("/api/profile");
+      if (!res.ok) return;
+      const data = (await res.json()) as ProfileData;
+      setProfile(data);
+      setDirty(false);
+      setSaveSuccess(false);
+      setSaveErrors([]);
+    } catch {
+      // Silently handle reload errors — the profile was already updated server-side
+    }
+  }, []);
 
   /** Update a single field and mark form as dirty. */
   const updateField = useCallback(
@@ -145,6 +193,82 @@ export default function ProfileEditPage() {
     }
   }, [profile, dirty]);
 
+  /** Poll refresh status and handle completion/error. */
+  const pollRefreshStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/profile/refresh-status");
+      if (!res.ok) return;
+
+      const data = (await res.json()) as RefreshStatusResponse;
+      setRefreshStage(data.stage);
+      setRefreshMessage(data.message);
+
+      if (data.stage === "complete") {
+        // Refresh finished — stop polling, reload profile
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        setRefreshing(false);
+        setRefreshWarnings(data.warnings ?? []);
+        // Reload the updated profile
+        await reloadProfile();
+      } else if (data.stage === "error") {
+        // Refresh failed — stop polling, show error
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        setRefreshing(false);
+        setRefreshError(data.error ?? "Profile refresh failed");
+      }
+    } catch {
+      // Silently handle network errors during polling
+    }
+  }, [reloadProfile]);
+
+  /** Trigger a full profile refresh via POST /api/profile/refresh. */
+  const handleRefresh = useCallback(async () => {
+    if (refreshing || dirty) return;
+
+    setRefreshing(true);
+    setRefreshStage("starting");
+    setRefreshMessage("Starting profile refresh...");
+    setRefreshError(null);
+    setRefreshWarnings([]);
+    setSaveSuccess(false);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/profile/refresh", { method: "POST" });
+      const data = (await res.json()) as { status: string };
+
+      if (data.status === "already_running") {
+        // Already running — just start polling
+      } else if (data.status === "no_profile") {
+        setRefreshing(false);
+        setRefreshStage(null);
+        setRefreshMessage(null);
+        setError("No profile found. Please complete onboarding first.");
+        return;
+      } else if (data.status !== "started") {
+        setRefreshing(false);
+        setRefreshStage(null);
+        setRefreshMessage(null);
+        setError("Unexpected response from refresh endpoint.");
+        return;
+      }
+
+      // Start polling for refresh progress
+      pollTimerRef.current = setInterval(pollRefreshStatus, REFRESH_POLL_INTERVAL);
+    } catch (err) {
+      setRefreshing(false);
+      setRefreshStage(null);
+      setRefreshMessage(null);
+      setError(err instanceof Error ? err.message : "Failed to start refresh");
+    }
+  }, [refreshing, dirty, pollRefreshStatus]);
+
   /** Navigate back to home without saving. */
   const handleBack = useCallback(() => {
     router.push("/");
@@ -198,15 +322,108 @@ export default function ProfileEditPage() {
             </svg>
             Back to home
           </button>
-          <h1 className="text-3xl font-bold tracking-tight">Edit Your Profile</h1>
-          <p className="mt-2 text-sm text-gray-500">
-            Update your research profile. Changes will bump your profile version
-            and trigger re-evaluation of collaboration proposals.
-          </p>
-          <p className="mt-1 text-xs text-gray-400">
-            Profile version {profile.profileVersion}
-          </p>
+          <div className="flex items-start justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Edit Your Profile</h1>
+              <p className="mt-2 text-sm text-gray-500">
+                Update your research profile. Changes will bump your profile version
+                and trigger re-evaluation of collaboration proposals.
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Profile version {profile.profileVersion}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing || dirty}
+              title={dirty ? "Save or discard changes before refreshing" : "Re-fetch publications from ORCID and re-synthesize your profile"}
+              className="ml-4 mt-1 inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg
+                className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H4.598a.75.75 0 00-.75.75v3.634a.75.75 0 001.5 0v-2.09l.195.194a7 7 0 0011.713-3.143.75.75 0 10-1.444-.424zm-10.624-2.85a5.5 5.5 0 019.201-2.465l.312.31H11.77a.75.75 0 000 1.5h3.634a.75.75 0 00.75-.75V3.535a.75.75 0 00-1.5 0v2.09l-.195-.193A7 7 0 002.745 8.575a.75.75 0 101.444.424z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              {refreshing ? "Refreshing..." : "Refresh Profile"}
+            </button>
+          </div>
         </div>
+
+        {/* Refresh progress indicator */}
+        {refreshing && refreshMessage && (
+          <div className="mb-6 rounded-md bg-blue-50 border border-blue-200 p-4">
+            <div className="flex items-center gap-3">
+              <svg
+                className="h-5 w-5 animate-spin text-blue-600"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-blue-800">
+                  {refreshMessage}
+                </p>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  This may take a minute. Your publications are being re-fetched
+                  and your profile re-synthesized.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Refresh completion with warnings */}
+        {!refreshing && refreshStage === "complete" && (
+          <div className="mb-6 rounded-md bg-green-50 p-4">
+            <p className="text-sm text-green-700">
+              Profile refreshed successfully (version {profile.profileVersion}).
+            </p>
+            {refreshWarnings.length > 0 && (
+              <ul className="mt-2 list-disc pl-5 text-sm text-yellow-700">
+                {refreshWarnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* Refresh error */}
+        {!refreshing && refreshError && (
+          <div className="mb-6 rounded-md bg-red-50 p-4">
+            <p className="text-sm text-red-700">
+              Refresh failed: {refreshError}
+            </p>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="mt-2 text-sm font-medium text-red-600 hover:text-red-800 underline"
+            >
+              Try again
+            </button>
+          </div>
+        )}
 
         {/* Success message */}
         {saveSuccess && (
@@ -251,7 +468,8 @@ export default function ProfileEditPage() {
               value={profile.researchSummary}
               onChange={(e) => updateField("researchSummary", e.target.value)}
               rows={8}
-              className="mt-1.5 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              disabled={refreshing}
+              className="mt-1.5 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
             <p
               className={`mt-1 text-xs ${
@@ -365,7 +583,7 @@ export default function ProfileEditPage() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving || !dirty}
+            disabled={saving || !dirty || refreshing}
             className="rounded-md bg-blue-600 px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving ? "Saving..." : "Save Changes"}
