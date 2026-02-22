@@ -1,11 +1,11 @@
 /**
- * ProposalTabs — Tab navigation between Queue and Archive views.
+ * ProposalTabs — Tab navigation between Queue, Archive, and Matches views.
  *
  * Client component that renders tab buttons and conditionally displays
- * either the SwipeQueue or ArchiveTab based on the active tab.
+ * the SwipeQueue, ArchiveTab, or MatchesTab based on the active tab.
  *
  * Spec reference: specs/swipe-interface.md — the swipe interface has
- * a Queue (main swipe view) and an Archive tab.
+ * a Queue (main swipe view), an Archive tab, and a Matches tab.
  */
 
 "use client";
@@ -13,12 +13,13 @@
 import { useState } from "react";
 import { SwipeQueue } from "@/components/swipe-queue";
 import { ArchiveTab } from "@/components/archive-tab";
+import { MatchesTab } from "@/components/matches-tab";
 
 interface ProposalTabsProps {
   hasMatchPool: boolean;
 }
 
-type Tab = "queue" | "archive";
+type Tab = "queue" | "archive" | "matches";
 
 export function ProposalTabs({ hasMatchPool }: ProposalTabsProps) {
   const [activeTab, setActiveTab] = useState<Tab>("queue");
@@ -48,12 +49,23 @@ export function ProposalTabs({ hasMatchPool }: ProposalTabsProps) {
           >
             Archive
           </button>
+          <button
+            onClick={() => setActiveTab("matches")}
+            className={`rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === "matches"
+                ? "bg-gray-900 text-white"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            }`}
+          >
+            Matches
+          </button>
         </div>
       </div>
 
       {/* Tab content */}
       {activeTab === "queue" && <SwipeQueue hasMatchPool={hasMatchPool} />}
       {activeTab === "archive" && <ArchiveTab />}
+      {activeTab === "matches" && <MatchesTab />}
     </div>
   );
 }
