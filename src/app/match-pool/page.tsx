@@ -115,6 +115,27 @@ export default function MatchPoolPage() {
   );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Affiliation selection state
+  const [showAffiliationForm, setShowAffiliationForm] = useState(false);
+  const [affInstitution, setAffInstitution] = useState("");
+  const [affDepartment, setAffDepartment] = useState("");
+  const [affSelectAll, setAffSelectAll] = useState(false);
+  const [affSubmitting, setAffSubmitting] = useState(false);
+  const [institutionSuggestions, setInstitutionSuggestions] = useState<
+    string[]
+  >([]);
+  const [departmentSuggestions, setDepartmentSuggestions] = useState<string[]>(
+    [],
+  );
+  const [showInstitutionDropdown, setShowInstitutionDropdown] = useState(false);
+  const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
+  const instDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deptDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [removingAffId, setRemovingAffId] = useState<string | null>(null);
+  const [confirmRemoveAffId, setConfirmRemoveAffId] = useState<string | null>(
+    null,
+  );
+
   const fetchPool = useCallback(async () => {
     try {
       const res = await fetch("/api/match-pool");
@@ -229,6 +250,126 @@ export default function MatchPoolPage() {
         );
       } finally {
         setRemovingId(null);
+      }
+    },
+    [fetchPool],
+  );
+
+  /** Fetch institution suggestions for autocomplete. */
+  useEffect(() => {
+    if (instDebounceRef.current) clearTimeout(instDebounceRef.current);
+    const trimmed = affInstitution.trim();
+    if (trimmed.length < 2) {
+      setInstitutionSuggestions([]);
+      return;
+    }
+    instDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/match-pool/institutions?q=${encodeURIComponent(trimmed)}`,
+        );
+        if (res.ok) {
+          const json = (await res.json()) as { institutions: string[] };
+          setInstitutionSuggestions(json.institutions);
+          setShowInstitutionDropdown(json.institutions.length > 0);
+        }
+      } catch {
+        setInstitutionSuggestions([]);
+      }
+    }, 300);
+    return () => {
+      if (instDebounceRef.current) clearTimeout(instDebounceRef.current);
+    };
+  }, [affInstitution]);
+
+  /** Fetch department suggestions for autocomplete when institution is set. */
+  useEffect(() => {
+    if (deptDebounceRef.current) clearTimeout(deptDebounceRef.current);
+    const instTrimmed = affInstitution.trim();
+    const deptTrimmed = affDepartment.trim();
+    if (instTrimmed.length < 2) {
+      setDepartmentSuggestions([]);
+      return;
+    }
+    deptDebounceRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ institution: instTrimmed });
+        if (deptTrimmed.length > 0) params.set("q", deptTrimmed);
+        const res = await fetch(`/api/match-pool/departments?${params}`);
+        if (res.ok) {
+          const json = (await res.json()) as { departments: string[] };
+          setDepartmentSuggestions(json.departments);
+          setShowDepartmentDropdown(json.departments.length > 0);
+        }
+      } catch {
+        setDepartmentSuggestions([]);
+      }
+    }, 300);
+    return () => {
+      if (deptDebounceRef.current) clearTimeout(deptDebounceRef.current);
+    };
+  }, [affInstitution, affDepartment]);
+
+  /** Submit an affiliation selection (institution/department or all users). */
+  const handleAffiliationSubmit = useCallback(async () => {
+    setAffSubmitting(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (affSelectAll) {
+        body.selectAll = true;
+      } else {
+        body.institution = affInstitution.trim();
+        if (affDepartment.trim()) {
+          body.department = affDepartment.trim();
+        }
+      }
+      const res = await fetch("/api/match-pool/affiliation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || "Failed to create affiliation selection");
+      }
+      // Reset form and re-fetch pool
+      setAffInstitution("");
+      setAffDepartment("");
+      setAffSelectAll(false);
+      setShowAffiliationForm(false);
+      await fetchPool();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create affiliation selection",
+      );
+    } finally {
+      setAffSubmitting(false);
+    }
+  }, [affSelectAll, affInstitution, affDepartment, fetchPool]);
+
+  /** Remove an affiliation selection and its auto-added entries. */
+  const handleRemoveAffiliation = useCallback(
+    async (affiliationId: string) => {
+      setRemovingAffId(affiliationId);
+      setConfirmRemoveAffId(null);
+      try {
+        const res = await fetch(
+          `/api/match-pool/affiliation/${affiliationId}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok && res.status !== 204) {
+          throw new Error("Failed to remove affiliation selection");
+        }
+        await fetchPool();
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to remove affiliation selection",
+        );
+      } finally {
+        setRemovingAffId(null);
       }
     },
     [fetchPool],
@@ -445,6 +586,166 @@ export default function MatchPoolPage() {
           )}
         </div>
 
+        {/* Affiliation selection section */}
+        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-medium text-gray-700">
+              Add by Affiliation
+            </h2>
+            {!showAffiliationForm && (
+              <button
+                onClick={() => setShowAffiliationForm(true)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+              >
+                Add affiliation or all users
+              </button>
+            )}
+          </div>
+          {showAffiliationForm && (
+            <div className="space-y-3">
+              {/* All users toggle */}
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={affSelectAll}
+                  onChange={(e) => setAffSelectAll(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>Add all researchers on the platform</span>
+              </label>
+
+              {!affSelectAll && (
+                <>
+                  {/* Institution input with autocomplete */}
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Institution
+                    </label>
+                    <input
+                      type="text"
+                      value={affInstitution}
+                      onChange={(e) => {
+                        setAffInstitution(e.target.value);
+                        setShowInstitutionDropdown(true);
+                      }}
+                      onFocus={() => {
+                        if (institutionSuggestions.length > 0)
+                          setShowInstitutionDropdown(true);
+                      }}
+                      onBlur={() => {
+                        // Delay to allow click on dropdown item
+                        setTimeout(() => setShowInstitutionDropdown(false), 200);
+                      }}
+                      placeholder="e.g., Stanford University"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    {showInstitutionDropdown &&
+                      institutionSuggestions.length > 0 && (
+                        <ul className="absolute z-10 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg max-h-40 overflow-y-auto">
+                          {institutionSuggestions.map((inst) => (
+                            <li
+                              key={inst}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setAffInstitution(inst);
+                                setShowInstitutionDropdown(false);
+                              }}
+                              className="cursor-pointer px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                            >
+                              {inst}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </div>
+
+                  {/* Department input with autocomplete */}
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Department{" "}
+                      <span className="font-normal text-gray-400">
+                        (optional)
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      value={affDepartment}
+                      onChange={(e) => {
+                        setAffDepartment(e.target.value);
+                        setShowDepartmentDropdown(true);
+                      }}
+                      onFocus={() => {
+                        if (departmentSuggestions.length > 0)
+                          setShowDepartmentDropdown(true);
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => setShowDepartmentDropdown(false), 200);
+                      }}
+                      placeholder="e.g., Department of Biology"
+                      disabled={affInstitution.trim().length < 2}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                    />
+                    {showDepartmentDropdown &&
+                      departmentSuggestions.length > 0 && (
+                        <ul className="absolute z-10 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg max-h-40 overflow-y-auto">
+                          {departmentSuggestions.map((dept) => (
+                            <li
+                              key={dept}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setAffDepartment(dept);
+                                setShowDepartmentDropdown(false);
+                              }}
+                              className="cursor-pointer px-3 py-2 text-sm text-gray-700 hover:bg-blue-50"
+                            >
+                              {dept}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                  </div>
+                </>
+              )}
+
+              <p className="text-xs text-gray-400">
+                {affSelectAll
+                  ? "All current and future researchers on the platform will be added to your match pool."
+                  : "All current and future researchers at this institution will be added to your match pool."}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAffiliationSubmit}
+                  disabled={
+                    affSubmitting ||
+                    (!affSelectAll && affInstitution.trim().length < 2)
+                  }
+                  className="rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {affSubmitting ? "Adding..." : "Add Selection"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAffiliationForm(false);
+                    setAffInstitution("");
+                    setAffDepartment("");
+                    setAffSelectAll(false);
+                  }}
+                  className="rounded-md px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {!showAffiliationForm && (
+            <p className="text-xs text-gray-400">
+              Add all researchers at an institution or across the entire
+              platform. New users matching your criteria are automatically added.
+            </p>
+          )}
+        </div>
+
         {/* Stats bar — shown when pool is not empty */}
         {!isEmpty && (
           <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
@@ -506,26 +807,57 @@ export default function MatchPoolPage() {
                   key={sel.id}
                   className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2"
                 >
-                  <div className="text-sm text-gray-700">
-                    {sel.selectAll ? (
-                      <span className="font-medium">All researchers</span>
-                    ) : (
-                      <>
-                        <span className="font-medium">
-                          {sel.institution ?? "Any institution"}
-                        </span>
-                        {sel.department && (
-                          <span className="text-gray-500">
-                            {" "}
-                            &middot; {sel.department}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-gray-700">
+                      {sel.selectAll ? (
+                        <span className="font-medium">All researchers</span>
+                      ) : (
+                        <>
+                          <span className="font-medium">
+                            {sel.institution ?? "Any institution"}
                           </span>
-                        )}
-                      </>
+                          {sel.department && (
+                            <span className="text-gray-500">
+                              {" "}
+                              &middot; {sel.department}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      Auto-expands on new joins
+                    </p>
+                  </div>
+                  <div className="ml-3 flex-shrink-0">
+                    {confirmRemoveAffId === sel.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleRemoveAffiliation(sel.id)}
+                          disabled={removingAffId === sel.id}
+                          className="rounded px-2 py-1 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 disabled:opacity-50"
+                        >
+                          {removingAffId === sel.id
+                            ? "Removing..."
+                            : "Confirm"}
+                        </button>
+                        <button
+                          onClick={() => setConfirmRemoveAffId(null)}
+                          className="rounded px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmRemoveAffId(sel.id)}
+                        className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Remove this selection and its auto-added entries"
+                      >
+                        Remove
+                      </button>
                     )}
                   </div>
-                  <span className="text-xs text-gray-400">
-                    Auto-expands on new joins
-                  </span>
                 </div>
               ))}
             </div>
@@ -553,7 +885,8 @@ export default function MatchPoolPage() {
               No researchers in your pool yet
             </h3>
             <p className="mt-2 text-sm text-gray-500">
-              Use the search above to find and add researchers.
+              Search for individual researchers or add an entire institution
+              above.
             </p>
             {isOnboarding && (
               <p className="mt-3 text-xs text-amber-700">

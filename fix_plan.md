@@ -44,10 +44,10 @@
 - [x] Implement user search (by name, institution)
 - [x] Implement profile preview in search results (excluding user-submitted texts)
 - [x] Implement individual user selection (add/remove from match pool)
-- [ ] Implement affiliation selection (institution/department filter, dynamic expansion)
-- [ ] Implement "all users" selection (dynamic expansion)
+- [x] Implement affiliation selection (institution/department filter, dynamic expansion)
+- [x] Implement "all users" selection (dynamic expansion)
 - [ ] Implement match pool cap logic (200 cap, priority ordering)
-- [ ] Store AffiliationSelection records
+- [x] Store AffiliationSelection records
 - [ ] Auto-expand match pools when new users join (check affiliation selections and all-users flags)
 - [x] Build match pool view (show who's in it, how added, remove option)
 - [x] Enforce match pool setup as required step before showing main app
