@@ -54,7 +54,7 @@
 
 ## Phase 5: Matching Engine
 
-- [ ] Build matching engine LLM prompt with few-shot examples (store in prompts/matching-engine.md)
+- [x] Build matching engine LLM prompt with few-shot examples (store in prompts/matching-engine.md)
 - [ ] Implement eligible pair computation (mutual selection + incoming logic)
 - [ ] Implement visibility assignment logic
 - [ ] Implement context assembly per pair (profiles, abstracts, existing proposals)
