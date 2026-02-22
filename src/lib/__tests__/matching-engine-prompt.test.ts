@@ -23,6 +23,8 @@ import {
   parseMatchingOutput,
   validateProposal,
   filterValidProposals,
+  computeTextSimilarity,
+  deduplicateProposals,
   buildMatchingRetryMessage,
   MATCHING_MODEL_CONFIG,
 } from "../matching-engine-prompt";
@@ -707,6 +709,268 @@ describe("matching-engine-prompt", () => {
       expect(result.errors).toHaveLength(2);
       expect(result.errors[0]).toHaveLength(0); // valid proposal has no errors
       expect(result.errors[1]!.length).toBeGreaterThan(0); // invalid has errors
+    });
+  });
+
+  describe("computeTextSimilarity", () => {
+    /** Identical strings should have similarity of 1.0 (perfect match). */
+    it("returns 1.0 for identical strings", () => {
+      const text = "CRISPR-Guided Kinase Inhibitor Resistance Profiling";
+      expect(computeTextSimilarity(text, text)).toBe(1.0);
+    });
+
+    /** Identical content with different casing should match (case-insensitive). */
+    it("is case-insensitive", () => {
+      expect(
+        computeTextSimilarity("CRISPR Gene Editing", "crispr gene editing"),
+      ).toBe(1.0);
+    });
+
+    /** Punctuation differences should not affect similarity (punctuation removed). */
+    it("ignores punctuation differences", () => {
+      expect(
+        computeTextSimilarity(
+          "What is the role of BCL2?",
+          "What is the role of BCL2",
+        ),
+      ).toBe(1.0);
+    });
+
+    /** Completely different texts should have similarity of 0. */
+    it("returns 0 for completely different texts", () => {
+      expect(
+        computeTextSimilarity(
+          "CRISPR gene editing in cancer",
+          "quantum computing algorithms for optimization",
+        ),
+      ).toBe(0);
+    });
+
+    /** Texts with partial word overlap should return proportional similarity. */
+    it("returns proportional similarity for partial overlap", () => {
+      // "CRISPR" and "screening" overlap, "gene" and "drug" differ
+      // Set A: {crispr, gene, screening} Set B: {crispr, drug, screening}
+      // Intersection: {crispr, screening} = 2, Union: {crispr, gene, screening, drug} = 4
+      // Jaccard = 2/4 = 0.5
+      const similarity = computeTextSimilarity(
+        "CRISPR gene screening",
+        "CRISPR drug screening",
+      );
+      expect(similarity).toBeCloseTo(0.5, 5);
+    });
+
+    /** Two empty strings should be considered identical (both trivially empty). */
+    it("returns 1.0 for two empty strings", () => {
+      expect(computeTextSimilarity("", "")).toBe(1.0);
+    });
+
+    /** One empty string against non-empty should return 0. */
+    it("returns 0 when one string is empty", () => {
+      expect(computeTextSimilarity("", "some text")).toBe(0);
+      expect(computeTextSimilarity("some text", "")).toBe(0);
+    });
+
+    /** Whitespace-only strings should be treated as empty. */
+    it("treats whitespace-only strings as empty", () => {
+      expect(computeTextSimilarity("   ", "   ")).toBe(1.0);
+      expect(computeTextSimilarity("   ", "some text")).toBe(0);
+    });
+
+    /** Duplicate words in either string should not inflate similarity (set-based). */
+    it("handles duplicate words without inflation", () => {
+      // "gene gene gene" → set {gene}, "gene editing" → set {gene, editing}
+      // Intersection: {gene} = 1, Union: {gene, editing} = 2
+      // Jaccard = 1/2 = 0.5
+      const similarity = computeTextSimilarity(
+        "gene gene gene",
+        "gene editing",
+      );
+      expect(similarity).toBeCloseTo(0.5, 5);
+    });
+
+    /**
+     * Realistic proposal title similarity test — a rephrased version of the
+     * same proposal should score above 0.5 threshold.
+     */
+    it("detects rephrased proposal titles as similar", () => {
+      const original = "Computational Optimization of Drug Resistance Targets in AML";
+      const rephrased = "Drug Resistance Target Optimization in AML Using Computational Methods";
+      // Many shared words: computational, optimization, drug, resistance, targets/target, aml
+      const similarity = computeTextSimilarity(original, rephrased);
+      expect(similarity).toBeGreaterThanOrEqual(0.5);
+    });
+
+    /**
+     * Realistically different proposal titles should score well below 0.5 threshold.
+     */
+    it("distinguishes genuinely different proposal titles", () => {
+      const titleA = "Computational Optimization of Drug Resistance Targets in AML";
+      const titleB = "Cryo-ET Visualization of Mitochondrial Membrane Remodeling";
+      const similarity = computeTextSimilarity(titleA, titleB);
+      expect(similarity).toBeLessThan(0.2);
+    });
+  });
+
+  describe("deduplicateProposals", () => {
+    /** With no existing proposals, all new proposals should pass through. */
+    it("returns all proposals when no existing proposals", () => {
+      const proposals = [
+        makeValidProposal({ title: "New Proposal" }),
+      ];
+      const result = deduplicateProposals(proposals, []);
+      expect(result.unique).toHaveLength(1);
+      expect(result.duplicates).toBe(0);
+    });
+
+    /** A new proposal with a similar title to an existing one should be filtered out. */
+    it("filters out proposals with similar titles to existing ones", () => {
+      const proposals = [
+        makeValidProposal({
+          title: "Drug Resistance Target Optimization in AML Using Computational Methods",
+          scientific_question: "A completely unique question about something new?",
+        }),
+      ];
+      const existing = [
+        {
+          title: "Computational Optimization of Drug Resistance Targets in AML",
+          scientificQuestion: "Unrelated question about BCL2 signaling?",
+        },
+      ];
+      const result = deduplicateProposals(proposals, existing);
+      expect(result.unique).toHaveLength(0);
+      expect(result.duplicates).toBe(1);
+    });
+
+    /** A new proposal with a similar scientific question should be filtered out. */
+    it("filters out proposals with similar scientific questions to existing ones", () => {
+      const proposals = [
+        makeValidProposal({
+          title: "A Completely Different Title That Shares No Words",
+          scientific_question:
+            "Which kinase domain mutations confer resistance to ABL1 inhibitors?",
+        }),
+      ];
+      const existing = [
+        {
+          title: "Unrelated existing title about cryo-ET",
+          scientificQuestion:
+            "What kinase domain mutations give resistance to next-generation ABL1 inhibitors?",
+        },
+      ];
+      const result = deduplicateProposals(proposals, existing);
+      expect(result.unique).toHaveLength(0);
+      expect(result.duplicates).toBe(1);
+    });
+
+    /** Genuinely distinct proposals should pass through de-duplication. */
+    it("keeps proposals that are genuinely distinct from existing ones", () => {
+      const proposals = [
+        makeValidProposal({
+          title: "Cryo-ET Visualization of Mitochondrial Membrane Remodeling",
+          scientific_question:
+            "How does HRI activation remodel mitochondrial membrane ultrastructure?",
+        }),
+      ];
+      const existing = [
+        {
+          title: "Computational Optimization of Drug Resistance Targets in AML",
+          scientificQuestion:
+            "Can structure-based drug design overcome CRISPR-identified resistance mutations?",
+        },
+      ];
+      const result = deduplicateProposals(proposals, existing);
+      expect(result.unique).toHaveLength(1);
+      expect(result.duplicates).toBe(0);
+    });
+
+    /** Mixed batch: some duplicates and some unique proposals. */
+    it("handles mixed batch of duplicate and unique proposals", () => {
+      const proposals = [
+        makeValidProposal({
+          title: "Drug Resistance Targets Computational Optimization in AML",
+          scientific_question: "Unique question 1?",
+        }),
+        makeValidProposal({
+          title: "Cryo-ET of Mitochondrial Membranes",
+          scientific_question: "Totally different question about membranes?",
+        }),
+        makeValidProposal({
+          title: "Yet Another Unique Proposal About Neuroscience",
+          scientific_question:
+            "Can structure-based drug design identify compounds that overcome resistance mutations in AML?",
+        }),
+      ];
+      const existing = [
+        {
+          title: "Computational Optimization of Drug Resistance Targets in AML",
+          scientificQuestion:
+            "Can structure-based drug design overcome CRISPR-identified resistance mutations in AML?",
+        },
+      ];
+      const result = deduplicateProposals(proposals, existing);
+      // First is duplicate by title, third by question, second is unique
+      expect(result.unique).toHaveLength(1);
+      expect(result.unique[0]!.title).toBe("Cryo-ET of Mitochondrial Membranes");
+      expect(result.duplicates).toBe(2);
+    });
+
+    /** Checks against multiple existing proposals — duplicate if similar to ANY. */
+    it("checks against all existing proposals", () => {
+      const proposals = [
+        makeValidProposal({
+          title: "Neuroprotection via Tetracyclines and ISR Activators",
+          scientific_question: "Something entirely new?",
+        }),
+      ];
+      const existing = [
+        {
+          title: "Computational Optimization of Drug Resistance Targets in AML",
+          scientificQuestion: "Resistance mutations question?",
+        },
+        {
+          title: "Synergistic Neuroprotection via Atypical Tetracyclines and ISR Activators",
+          scientificQuestion: "Tetracyclines and ISR question?",
+        },
+      ];
+      const result = deduplicateProposals(proposals, existing);
+      // Similar to the second existing proposal by title
+      expect(result.unique).toHaveLength(0);
+      expect(result.duplicates).toBe(1);
+    });
+
+    /** Custom threshold: stricter (higher) threshold should let more through. */
+    it("respects custom similarity threshold", () => {
+      const proposals = [
+        makeValidProposal({
+          title: "Drug Resistance Optimization AML",
+          scientific_question: "A unique question?",
+        }),
+      ];
+      const existing = [
+        {
+          title: "Computational Optimization of Drug Resistance Targets in AML",
+          scientificQuestion: "Unrelated question?",
+        },
+      ];
+      // With high threshold (0.9), the partial overlap shouldn't be enough
+      const strict = deduplicateProposals(proposals, existing, 0.9);
+      expect(strict.unique).toHaveLength(1);
+      expect(strict.duplicates).toBe(0);
+
+      // With low threshold (0.2), even modest overlap is caught
+      const lenient = deduplicateProposals(proposals, existing, 0.2);
+      expect(lenient.unique).toHaveLength(0);
+      expect(lenient.duplicates).toBe(1);
+    });
+
+    /** Empty proposals array should return empty results. */
+    it("handles empty proposals array", () => {
+      const result = deduplicateProposals(
+        [],
+        [{ title: "Existing", scientificQuestion: "Existing?" }],
+      );
+      expect(result.unique).toHaveLength(0);
+      expect(result.duplicates).toBe(0);
     });
   });
 

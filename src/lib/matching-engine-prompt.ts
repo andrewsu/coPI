@@ -89,6 +89,14 @@ export interface FilterResult {
   errors: string[][];
 }
 
+/** Result of de-duplicating new proposals against existing ones. */
+export interface DeduplicationResult {
+  /** Proposals that are sufficiently distinct from existing ones. */
+  unique: ProposalOutput[];
+  /** Number of proposals removed as duplicates. */
+  duplicates: number;
+}
+
 // --- Constants ---
 
 const MAX_ABSTRACTS_PER_RESEARCHER = 10;
@@ -553,6 +561,124 @@ export function filterValidProposals(
   }
 
   return { valid, discarded, errors };
+}
+
+// --- De-duplication ---
+
+/**
+ * Default Jaccard similarity threshold for considering a new proposal
+ * a duplicate of an existing one. A threshold of 0.5 means ≥50% of the
+ * combined word sets must overlap.
+ *
+ * Tuned for scientific proposal titles and questions, which are typically
+ * 5–20 words. At 0.5, two texts sharing half their vocabulary are flagged.
+ */
+const DEFAULT_SIMILARITY_THRESHOLD = 0.5;
+
+/**
+ * Normalizes text for similarity comparison: lowercases, removes
+ * punctuation, and splits into a set of unique words.
+ */
+function normalizeToWordSet(text: string): Set<string> {
+  const normalized = text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 0);
+  return new Set(normalized);
+}
+
+/**
+ * Computes Jaccard similarity between two text strings.
+ *
+ * Jaccard similarity = |intersection| / |union| of word sets.
+ * Returns a value between 0 (no overlap) and 1 (identical word sets).
+ *
+ * Uses normalized, lowercased word sets with punctuation removed.
+ * Suitable for comparing short scientific texts like proposal titles
+ * and research questions where word overlap indicates topical similarity.
+ *
+ * Returns 1.0 if both strings are empty (both normalized to empty sets),
+ * since two empty texts are trivially identical. Returns 0 if only one
+ * is empty.
+ */
+export function computeTextSimilarity(a: string, b: string): number {
+  const setA = normalizeToWordSet(a);
+  const setB = normalizeToWordSet(b);
+
+  if (setA.size === 0 && setB.size === 0) return 1.0;
+  if (setA.size === 0 || setB.size === 0) return 0;
+
+  let intersection = 0;
+  for (const word of setA) {
+    if (setB.has(word)) intersection++;
+  }
+
+  const union = setA.size + setB.size - intersection;
+  return intersection / union;
+}
+
+/**
+ * Filters out newly generated proposals that are substantially similar
+ * to existing proposals for the same researcher pair.
+ *
+ * Per spec (matching-engine.md, "De-duplication"):
+ * "Post-generation: check new proposal titles/questions against existing
+ * ones. If substantially similar (LLM judgment or simple similarity check),
+ * discard."
+ *
+ * A new proposal is considered a duplicate if EITHER:
+ * - Its title has Jaccard similarity >= threshold with any existing title, OR
+ * - Its scientific_question has Jaccard similarity >= threshold with any
+ *   existing scientificQuestion.
+ *
+ * This catches cases where the LLM rephrases an existing proposal despite
+ * being instructed to propose something distinct.
+ *
+ * @param proposals - Newly generated proposals (already validated).
+ * @param existingProposals - Existing proposals for this pair.
+ * @param threshold - Similarity threshold (0–1). Defaults to 0.5.
+ * @returns The unique proposals and duplicate count.
+ */
+export function deduplicateProposals(
+  proposals: ProposalOutput[],
+  existingProposals: ExistingProposal[],
+  threshold: number = DEFAULT_SIMILARITY_THRESHOLD,
+): DeduplicationResult {
+  if (existingProposals.length === 0) {
+    return { unique: proposals, duplicates: 0 };
+  }
+
+  const unique: ProposalOutput[] = [];
+  let duplicates = 0;
+
+  for (const proposal of proposals) {
+    let isDuplicate = false;
+
+    for (const existing of existingProposals) {
+      const titleSimilarity = computeTextSimilarity(
+        proposal.title,
+        existing.title,
+      );
+      const questionSimilarity = computeTextSimilarity(
+        proposal.scientific_question,
+        existing.scientificQuestion,
+      );
+
+      if (titleSimilarity >= threshold || questionSimilarity >= threshold) {
+        isDuplicate = true;
+        break;
+      }
+    }
+
+    if (isDuplicate) {
+      duplicates++;
+    } else {
+      unique.push(proposal);
+    }
+  }
+
+  return { unique, duplicates };
 }
 
 // --- Retry prompt ---

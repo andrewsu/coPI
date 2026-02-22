@@ -235,6 +235,7 @@ describe("matching-engine service", () => {
       expect(result.proposals).toHaveLength(1);
       expect(result.proposals[0]!.title).toBe(proposals[0]!.title);
       expect(result.discarded).toBe(0);
+      expect(result.deduplicated).toBe(0);
       expect(result.attempts).toBe(1);
       expect(result.retried).toBe(false);
       expect(result.model).toBe(MATCHING_MODEL_CONFIG.model);
@@ -256,6 +257,7 @@ describe("matching-engine service", () => {
 
       expect(result.proposals).toHaveLength(0);
       expect(result.discarded).toBe(0);
+      expect(result.deduplicated).toBe(0);
       expect(result.attempts).toBe(1);
       expect(result.retried).toBe(false);
       expect(result.rawCount).toBe(0);
@@ -286,6 +288,7 @@ describe("matching-engine service", () => {
       expect(result.proposals).toHaveLength(1);
       expect(result.proposals[0]!.title).toBe(validProposal.title);
       expect(result.discarded).toBe(1);
+      expect(result.deduplicated).toBe(0);
       expect(result.attempts).toBe(1);
       expect(result.retried).toBe(false);
       expect(result.rawCount).toBe(2);
@@ -335,6 +338,7 @@ describe("matching-engine service", () => {
 
       expect(result.proposals).toHaveLength(1);
       expect(result.proposals[0]!.title).toBe(validProposals[0]!.title);
+      expect(result.deduplicated).toBe(0);
       expect(result.attempts).toBe(2);
       expect(result.retried).toBe(true);
       expect(result.rawCount).toBe(1);
@@ -366,6 +370,7 @@ describe("matching-engine service", () => {
 
       expect(result.proposals).toHaveLength(0);
       expect(result.discarded).toBe(0);
+      expect(result.deduplicated).toBe(0);
       expect(result.attempts).toBe(2);
       expect(result.retried).toBe(true);
       expect(result.rawCount).toBe(0);
@@ -387,6 +392,7 @@ describe("matching-engine service", () => {
       );
 
       expect(result.proposals).toHaveLength(0);
+      expect(result.deduplicated).toBe(0);
       expect(result.attempts).toBe(1);
       expect(result.retried).toBe(false);
       expect(client.createSpy).toHaveBeenCalledTimes(1);
@@ -548,6 +554,144 @@ describe("matching-engine service", () => {
     });
 
     /**
+     * Post-generation de-duplication: when the LLM generates a proposal
+     * whose title is substantially similar to an existing proposal, it
+     * should be filtered out. Per spec: "Post-generation: check new proposal
+     * titles/questions against existing ones. If substantially similar, discard."
+     */
+    it("deduplicates proposals with similar titles to existing proposals", async () => {
+      const ctx = makeTestPairContext({
+        input: {
+          ...makeTestPairContext().input,
+          existingProposals: [
+            {
+              title: "CRISPR-Guided Kinase Inhibitor Resistance Profiling",
+              scientificQuestion: "Some previous question?",
+            },
+          ],
+        },
+      });
+
+      // LLM generates a proposal with a title very similar to the existing one
+      const similarProposal = makeValidProposal({
+        title: "Kinase Inhibitor Resistance Profiling Using CRISPR Guidance",
+        scientific_question: "A completely different question about new things?",
+      });
+      const client = makeMockClient([
+        makeMockResponse(JSON.stringify([similarProposal])),
+      ]);
+
+      const result = await generateProposalsForPair(client, ctx);
+
+      expect(result.proposals).toHaveLength(0);
+      expect(result.deduplicated).toBe(1);
+      expect(result.discarded).toBe(0);
+    });
+
+    /**
+     * Post-generation de-duplication: proposals with similar scientific
+     * questions to existing ones should be filtered out, even if titles differ.
+     */
+    it("deduplicates proposals with similar scientific questions to existing proposals", async () => {
+      const ctx = makeTestPairContext({
+        input: {
+          ...makeTestPairContext().input,
+          existingProposals: [
+            {
+              title: "Some Existing Title",
+              scientificQuestion:
+                "Which kinase domain mutations confer resistance to next-generation ABL1 inhibitors?",
+            },
+          ],
+        },
+      });
+
+      const similarProposal = makeValidProposal({
+        title: "A Brand New Unique Title About Something Else",
+        scientific_question:
+          "What kinase domain mutations give resistance to ABL1 next-generation inhibitors?",
+      });
+      const client = makeMockClient([
+        makeMockResponse(JSON.stringify([similarProposal])),
+      ]);
+
+      const result = await generateProposalsForPair(client, ctx);
+
+      expect(result.proposals).toHaveLength(0);
+      expect(result.deduplicated).toBe(1);
+    });
+
+    /**
+     * Genuinely distinct proposals should pass through de-duplication
+     * even when existing proposals exist for the pair.
+     */
+    it("keeps genuinely distinct proposals when existing proposals exist", async () => {
+      const ctx = makeTestPairContext({
+        input: {
+          ...makeTestPairContext().input,
+          existingProposals: [
+            {
+              title: "CRISPR-Guided Kinase Inhibitor Resistance Profiling",
+              scientificQuestion:
+                "Which kinase domain mutations confer resistance to ABL1 inhibitors?",
+            },
+          ],
+        },
+      });
+
+      // LLM generates a completely different proposal
+      const distinctProposal = makeValidProposal({
+        title: "Cryo-ET Visualization of Mitochondrial Membrane Remodeling",
+        scientific_question:
+          "How does HRI activation remodel mitochondrial membrane ultrastructure?",
+      });
+      const client = makeMockClient([
+        makeMockResponse(JSON.stringify([distinctProposal])),
+      ]);
+
+      const result = await generateProposalsForPair(client, ctx);
+
+      expect(result.proposals).toHaveLength(1);
+      expect(result.proposals[0]!.title).toBe(distinctProposal.title);
+      expect(result.deduplicated).toBe(0);
+    });
+
+    /**
+     * De-duplication after retry: when a parse failure triggers a retry
+     * and the retry succeeds, de-duplication should still apply to the
+     * retried output.
+     */
+    it("applies de-duplication after successful retry", async () => {
+      const ctx = makeTestPairContext({
+        input: {
+          ...makeTestPairContext().input,
+          existingProposals: [
+            {
+              title: "CRISPR-Guided Kinase Inhibitor Resistance Profiling",
+              scientificQuestion: "Previous question?",
+            },
+          ],
+        },
+      });
+
+      const similarProposal = makeValidProposal({
+        title: "Kinase Inhibitor Resistance Profiling via CRISPR Screens",
+        scientific_question: "Something completely new and different?",
+      });
+      const client = makeMockClient([
+        makeMockResponse("not valid json"),
+        makeMockResponse(JSON.stringify([similarProposal])),
+      ]);
+
+      const result = await generateProposalsForPair(client, ctx);
+
+      expect(result.proposals).toHaveLength(0);
+      expect(result.deduplicated).toBe(1);
+      expect(result.retried).toBe(true);
+      expect(result.attempts).toBe(2);
+    });
+
+    /**
      * Proposals with invalid confidence_tier values should be discarded.
      * Only "high", "moderate", and "speculative" are valid.
      */
@@ -582,6 +726,7 @@ describe("matching-engine service", () => {
       const genResult = {
         proposals: [proposal],
         discarded: 0,
+        deduplicated: 0,
         attempts: 1,
         retried: false,
         model: MATCHING_MODEL_CONFIG.model,
@@ -637,6 +782,7 @@ describe("matching-engine service", () => {
       const genResult = {
         proposals: [],
         discarded: 0,
+        deduplicated: 0,
         attempts: 1,
         retried: false,
         model: MATCHING_MODEL_CONFIG.model,
@@ -667,6 +813,7 @@ describe("matching-engine service", () => {
       const genResult = {
         proposals: [proposal],
         discarded: 0,
+        deduplicated: 0,
         attempts: 1,
         retried: false,
         model: MATCHING_MODEL_CONFIG.model,
@@ -701,6 +848,7 @@ describe("matching-engine service", () => {
       const genResult = {
         proposals: [proposal],
         discarded: 0,
+        deduplicated: 0,
         attempts: 1,
         retried: false,
         model: MATCHING_MODEL_CONFIG.model,
@@ -730,6 +878,7 @@ describe("matching-engine service", () => {
       const genResult = {
         proposals,
         discarded: 0,
+        deduplicated: 0,
         attempts: 1,
         retried: false,
         model: MATCHING_MODEL_CONFIG.model,
@@ -764,6 +913,7 @@ describe("matching-engine service", () => {
       const genResult = {
         proposals: [makeValidProposal()],
         discarded: 0,
+        deduplicated: 0,
         attempts: 1,
         retried: false,
         model: MATCHING_MODEL_CONFIG.model,
@@ -786,6 +936,7 @@ describe("matching-engine service", () => {
       const genResult = {
         proposals: [makeValidProposal()],
         discarded: 0,
+        deduplicated: 0,
         attempts: 1,
         retried: false,
         model: MATCHING_MODEL_CONFIG.model,

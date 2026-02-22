@@ -61,7 +61,7 @@
 - [x] Implement abstract selection (up to 10 per researcher, prioritized by author position/recency/type)
 - [x] Implement LLM call with structured JSON output parsing
 - [x] Implement output validation (required fields, discard invalid)
-- [ ] Implement de-duplication against existing proposals
+- [x] Implement de-duplication against existing proposals
 - [x] Implement MatchingResult tracking (avoid redundant evaluations)
 - [ ] Implement job queue integration (SQS or in-process for dev)
 - [ ] Implement matching triggers (match pool change, profile update, scheduled)

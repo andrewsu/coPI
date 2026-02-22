@@ -21,6 +21,7 @@ import {
   getMatchingSystemMessage,
   parseMatchingOutput,
   filterValidProposals,
+  deduplicateProposals,
   buildMatchingRetryMessage,
   MATCHING_MODEL_CONFIG,
 } from "@/lib/matching-engine-prompt";
@@ -29,10 +30,12 @@ import {
 
 /** Result of a proposal generation attempt for one pair. */
 export interface ProposalGenerationResult {
-  /** Valid proposals that passed validation. Empty if none generated or all invalid. */
+  /** Valid proposals that passed validation and de-duplication. Empty if none generated or all invalid/duplicate. */
   proposals: ProposalOutput[];
   /** Number of proposals discarded due to validation failure. */
   discarded: number;
+  /** Number of proposals removed as duplicates of existing proposals. */
+  deduplicated: number;
   /** Number of LLM calls made (1 or 2). */
   attempts: number;
   /** Whether a retry was attempted. */
@@ -98,6 +101,8 @@ export async function generateProposalsForPair(
   const firstResponse = await callClaude(client, systemMessage, messages);
   const firstText = extractTextContent(firstResponse);
 
+  const existingProposals = pairContext.input.existingProposals;
+
   let proposals: ProposalOutput[];
   try {
     proposals = parseMatchingOutput(firstText);
@@ -118,6 +123,7 @@ export async function generateProposalsForPair(
         return {
           proposals: [],
           discarded: 0,
+          deduplicated: 0,
           attempts: 2,
           retried: true,
           model: MATCHING_MODEL_CONFIG.model,
@@ -125,11 +131,16 @@ export async function generateProposalsForPair(
         };
       }
 
-      // Parse succeeded on retry — validate and filter
+      // Parse succeeded on retry — validate, then deduplicate
       const filterResult = filterValidProposals(proposals);
+      const dedupResult = deduplicateProposals(
+        filterResult.valid,
+        existingProposals,
+      );
       return {
-        proposals: filterResult.valid,
+        proposals: dedupResult.unique,
         discarded: filterResult.discarded,
+        deduplicated: dedupResult.duplicates,
         attempts: 2,
         retried: true,
         model: MATCHING_MODEL_CONFIG.model,
@@ -141,6 +152,7 @@ export async function generateProposalsForPair(
     return {
       proposals: [],
       discarded: 0,
+      deduplicated: 0,
       attempts: 1,
       retried: false,
       model: MATCHING_MODEL_CONFIG.model,
@@ -148,11 +160,16 @@ export async function generateProposalsForPair(
     };
   }
 
-  // Parse succeeded on first attempt — validate and filter
+  // Parse succeeded on first attempt — validate, then deduplicate
   const filterResult = filterValidProposals(proposals);
+  const dedupResult = deduplicateProposals(
+    filterResult.valid,
+    existingProposals,
+  );
   return {
-    proposals: filterResult.valid,
+    proposals: dedupResult.unique,
     discarded: filterResult.discarded,
+    deduplicated: dedupResult.duplicates,
     attempts: 1,
     retried: false,
     model: MATCHING_MODEL_CONFIG.model,
