@@ -59,10 +59,10 @@
 - [x] Implement visibility assignment logic
 - [x] Implement context assembly per pair (profiles, abstracts, existing proposals)
 - [x] Implement abstract selection (up to 10 per researcher, prioritized by author position/recency/type)
-- [ ] Implement LLM call with structured JSON output parsing
-- [ ] Implement output validation (required fields, discard invalid)
+- [x] Implement LLM call with structured JSON output parsing
+- [x] Implement output validation (required fields, discard invalid)
 - [ ] Implement de-duplication against existing proposals
-- [ ] Implement MatchingResult tracking (avoid redundant evaluations)
+- [x] Implement MatchingResult tracking (avoid redundant evaluations)
 - [ ] Implement job queue integration (SQS or in-process for dev)
 - [ ] Implement matching triggers (match pool change, profile update, scheduled)
 - [ ] Implement error handling and retry logic
