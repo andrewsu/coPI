@@ -28,8 +28,8 @@
 - [x] Implement NCBI ID converter client (PMID ↔ PMCID)
 - [x] Build profile synthesis LLM prompt (store in prompts/profile-synthesis.md)
 - [x] Implement profile synthesis service (assemble context, call Claude, parse output)
-- [ ] Implement profile validation (word count, minimum fields)
-- [ ] Implement full pipeline orchestration (ORCID → PubMed → synthesis → store)
+- [x] Implement profile validation (word count, minimum fields)
+- [x] Implement full pipeline orchestration (ORCID → PubMed → synthesis → store)
 - [ ] Build onboarding UI: profile generation progress indicator
 - [ ] Build onboarding UI: profile review/edit page
 - [ ] Build profile edit page (direct editing of all synthesized fields)
@@ -119,12 +119,10 @@
 - Phase 6 depends on Phase 5 (proposals to display).
 - Phase 7 can be partially developed in parallel with Phase 6.
 - PubMed client (`pubmed.ts`) does not send `tool` or `email` parameters on E-utilities requests, unlike the ID converter and PMC clients. Should be harmonized per NCBI API guidelines.
-- None of the three NCBI clients (PubMed, ID converter, PMC) implement retry/backoff for rate limiting (429). The pipeline orchestration step should add a shared rate-limiting/retry layer for all NCBI API calls.
-- Sequential batch processing in all three NCBI clients lacks inter-batch delays, which risks rate limiting for researchers with many publications (400+). Address during pipeline orchestration.
-- Profile synthesis service (`profile-synthesis.ts`) edge cases to address during integration:
-  - Handles empty publications gracefully (no minimum publication requirement in validation), but pipeline orchestration must handle researchers with zero publications.
-  - No pre-validation check for completely empty researcher data (no name, affiliation, grants, or publications). If all optional fields are empty, the LLM still receives a minimal prompt.
-  - Large input contexts (30 publications + methods sections) may approach token limits. Monitor context size during pipeline assembly; current max_tokens is 2000 with potentially large input contexts.
-  - `SynthesisPublication` requires `abstract` field but makes `methodsText` optional. Ensure pipeline populates abstracts consistently; missing abstracts are not rejected but may limit LLM guidance.
-  - Array deduplication in output parsing is case-insensitive but preserves original case of first occurrence. If LLM outputs near-duplicates with different casing, only one is kept silently.
-  - Retry prompt includes current error counts but message text may appear identical on repeated failures. Consider logging counts or adding retry attempt number to distinguish iterations.
+- PubMed client (`pubmed.ts`) has a pre-existing TypeScript strict error on line 184 (`Element implicitly has an 'any' type because expression of type '"#text"' can't be used to index type 'string | { "#text": string; }'`). Should be fixed with a type narrowing check.
+- Pipeline orchestration (`profile-pipeline.ts`) adds inter-call NCBI rate limiting delays (350ms without API key, 110ms with key) between distinct API calls. Individual clients' internal batch processing still lacks inter-batch delays for researchers with 400+ publications; adding HTTP-level retry/backoff for 429 errors remains a future enhancement.
+- Pipeline handles zero-publication researchers: synthesis still runs with grants + user-submitted texts.
+- Pipeline stores DOI-only ORCID works that can't resolve to PMIDs as minimal Publication records (empty abstract, middle author position).
+- Profile synthesis edge cases (large input contexts, empty data, deduplication casing) are not fully addressed yet — monitor during real-world usage.
+- Array deduplication in output parsing is case-insensitive but preserves original case of first occurrence. If LLM outputs near-duplicates with different casing, only one is kept silently.
+- Retry prompt includes current error counts but message text may appear identical on repeated failures. Consider logging counts or adding retry attempt number to distinguish iterations.
