@@ -99,7 +99,7 @@
 - [x] Build admin CLI or panel for seeding profiles by ORCID ID list
 - [x] Implement seeded profile pipeline (create user + run pipeline without OAuth)
 
-## Phase 9: Deployment
+## Phase 9: Deployment & Production Fixes
 
 - [x] Create Dockerfile for the app
 - [x] Create Docker Compose for production (app + worker + postgres)
@@ -110,6 +110,20 @@
 - [ ] Configure environment variables
 - [x] Set up CloudWatch logging
 - [ ] Test full flow end-to-end on deployed instance
+
+## Phase 10: Admin Dashboard
+
+- [ ] Add `isAdmin` boolean field to User model, run migration
+- [ ] Implement admin route protection middleware (check `isAdmin` on session)
+- [ ] Build 403 page for non-admin users
+- [ ] Add admin link to nav/header (visible only to admin users)
+- [ ] Build Users Overview page (`/admin/users`) — sortable/filterable table
+- [ ] Build User Detail page (`/admin/users/[id]`) — profile, publications, match pool, proposals
+- [ ] Build Proposals Overview page (`/admin/proposals`) — sortable/filterable table
+- [ ] Build Proposal Detail page (`/admin/proposals/[id]`) — full read-only view
+- [ ] Build Matching Stats page (`/admin/stats`) — summary cards, matching results table, funnel
+- [ ] Implement admin API routes (`/api/admin/users`, `/api/admin/proposals`, `/api/admin/stats`)
+- [ ] Add CLI commands for granting/revoking admin (`npm run admin:grant`, `npm run admin:revoke`)
 
 ## Notes
 
