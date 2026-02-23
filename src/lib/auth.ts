@@ -17,6 +17,7 @@ import type { OAuthConfig } from "next-auth/providers/oauth";
 import { prisma } from "@/lib/prisma";
 import { getJobQueue } from "@/lib/job-queue";
 import { fetchOrcidProfile, type OrcidProfile } from "@/lib/orcid";
+import { flipPendingProposalsOnClaim } from "@/services/seed-profile";
 
 function getOrcidBaseUrl(): string {
   return process.env.ORCID_SANDBOX === "true"
@@ -156,6 +157,19 @@ export const authOptions: NextAuthOptions = {
               where: { id: existingUser.id },
               data: updates,
             });
+          }
+
+          // Per spec: when a seeded profile is claimed, flip pending_other_interest
+          // proposals to visible so they appear in the user's swipe queue
+          if (!existingUser.claimedAt) {
+            flipPendingProposalsOnClaim(prisma, existingUser.id).catch(
+              (err) => {
+                console.error(
+                  "[Auth] Failed to flip pending proposals on claim:",
+                  err,
+                );
+              },
+            );
           }
         } else {
           // New user — create account from ORCID data

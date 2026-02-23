@@ -31,8 +31,14 @@ jest.mock("@/lib/orcid", () => ({
   fetchOrcidProfile: jest.fn(),
 }));
 
+// Mock seed-profile service for visibility transition on claim
+jest.mock("@/services/seed-profile", () => ({
+  flipPendingProposalsOnClaim: jest.fn().mockResolvedValue(0),
+}));
+
 import { authOptions } from "../auth";
 import { prisma } from "@/lib/prisma";
+import { flipPendingProposalsOnClaim } from "@/services/seed-profile";
 
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
 
@@ -210,6 +216,51 @@ describe("signIn callback", () => {
         claimedAt: expect.any(Date),
       },
     });
+  });
+
+  it("flips pending proposals to visible when seeded profile is claimed", async () => {
+    /** Per spec: when a seeded profile is claimed, proposals with
+     *  pending_other_interest visibility should be flipped to visible
+     *  so they appear in the newly-claimed user's swipe queue. */
+    (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
+      id: "seeded-uuid",
+      orcid: "0000-0001-0000-0004",
+      name: "Seeded User",
+      institution: "Unknown",
+      department: null,
+      claimedAt: null,
+    });
+
+    await callSignIn(
+      { id: "0000-0001-0000-0004", name: "Seeded User", email: "s@u.edu" },
+      { provider: "orcid" },
+      { institution: "UCSD", department: "Medicine" }
+    );
+
+    expect(flipPendingProposalsOnClaim).toHaveBeenCalledWith(
+      prisma,
+      "seeded-uuid"
+    );
+  });
+
+  it("does not flip proposals for already-claimed users", async () => {
+    /** Returning users who already claimed should not trigger visibility changes. */
+    (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
+      id: "db-uuid-3",
+      orcid: "0000-0001-0000-0002",
+      name: "Existing Name",
+      institution: "Harvard",
+      department: "CS",
+      claimedAt: new Date("2024-01-01"),
+    });
+
+    await callSignIn(
+      { id: "0000-0001-0000-0002", name: "Existing Name", email: "e@h.edu" },
+      { provider: "orcid" },
+      { institution: "Harvard", department: "CS" }
+    );
+
+    expect(flipPendingProposalsOnClaim).not.toHaveBeenCalled();
   });
 
   it("rejects non-ORCID provider", async () => {

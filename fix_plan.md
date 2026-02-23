@@ -97,7 +97,7 @@
 - [x] Build settings page (email visibility, incoming proposals toggle, notification prefs)
 - [x] Implement account deletion (with proposal preservation logic)
 - [ ] Build admin CLI or panel for seeding profiles by ORCID ID list
-- [ ] Implement seeded profile pipeline (create user + run pipeline without OAuth)
+- [x] Implement seeded profile pipeline (create user + run pipeline without OAuth)
 
 ## Phase 9: Deployment
 
