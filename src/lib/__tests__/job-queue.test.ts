@@ -508,8 +508,9 @@ describe("getJobQueue", () => {
     expect(q1).toBe(q2);
   });
 
-  it("returns an InMemoryJobQueue instance", () => {
+  it("returns a PostgresJobQueue instance", () => {
+    const { PostgresJobQueue } = require("@/lib/postgres-job-queue");
     const q = getJobQueue();
-    expect(q).toBeInstanceOf(InMemoryJobQueue);
+    expect(q).toBeInstanceOf(PostgresJobQueue);
   });
 });

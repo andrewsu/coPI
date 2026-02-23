@@ -1,19 +1,15 @@
 /**
  * Standalone worker process entry point.
  *
- * Creates an in-memory job queue, registers the job processor, and
- * starts polling for jobs. Handles SIGTERM/SIGINT for graceful shutdown.
- *
- * In the pilot deployment, this runs as a separate Docker container
- * alongside the Next.js app. For the in-memory queue, jobs must be
- * enqueued within this same process (e.g., via an API or direct call).
- * A future SQS-backed implementation would allow cross-process job
- * submission.
+ * Uses the PostgreSQL-backed job queue shared with the Next.js app.
+ * Both containers connect to the same database, so jobs enqueued by
+ * the app are picked up by this worker via polling with atomic
+ * FOR UPDATE SKIP LOCKED claims.
  *
  * Run with: npm run worker (or: tsx src/worker/index.ts)
  */
 
-import { InMemoryJobQueue } from "@/lib/job-queue";
+import { getJobQueue } from "@/lib/job-queue";
 import { createJobProcessor } from "@/worker/handlers";
 import { prisma } from "@/lib/prisma";
 import { anthropic } from "@/lib/anthropic";
@@ -21,7 +17,7 @@ import { anthropic } from "@/lib/anthropic";
 async function main(): Promise<void> {
   console.log("[Worker] Starting job queue worker...");
 
-  const queue = new InMemoryJobQueue({ pollIntervalMs: 2000 });
+  const queue = getJobQueue();
   const processor = createJobProcessor({ prisma, anthropic });
 
   queue.start(processor);

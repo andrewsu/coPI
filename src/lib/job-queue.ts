@@ -1,11 +1,11 @@
 /**
  * Job queue abstraction for async task processing.
  *
- * Provides job type definitions and a queue interface with an
- * in-memory FIFO implementation for development/pilot deployments.
- * Production deployments can swap in an SQS-backed implementation.
- *
- * See specs/tech-stack.md "Job Queue" for the specification.
+ * Provides job type definitions, the queue interface, and an
+ * in-memory FIFO implementation for tests. The production singleton
+ * (getJobQueue) returns a PostgresJobQueue backed by the shared
+ * Prisma database, so jobs enqueued by the app are visible to the
+ * worker running in a separate container.
  */
 
 // --- Job payload types (from spec) ---
@@ -101,10 +101,12 @@ export interface JobQueue {
   stop(): Promise<void>;
 
   /** Number of jobs waiting to be processed. */
-  pendingCount(): number;
+  pendingCount(): number | Promise<number>;
 
   /** Look up a job by ID (if tracked). Returns null if not found. */
-  getJob(id: string): (QueuedJob & { status: JobStatus }) | null;
+  getJob(
+    id: string,
+  ): (QueuedJob & { status: JobStatus }) | null | Promise<(QueuedJob & { status: JobStatus }) | null>;
 }
 
 // --- In-memory implementation ---
@@ -334,21 +336,24 @@ export class InMemoryJobQueue implements JobQueue {
 
 // --- Singleton ---
 
+import { PostgresJobQueue } from "@/lib/postgres-job-queue";
+import { prisma } from "@/lib/prisma";
+
 const globalForQueue = globalThis as unknown as {
-  jobQueue: InMemoryJobQueue | undefined;
+  jobQueue: PostgresJobQueue | undefined;
 };
 
 /**
  * Returns the global job queue singleton.
  *
- * Creates an InMemoryJobQueue on first access. The queue is created
- * unstarted — call start(handler) to begin processing jobs. Jobs
- * can be enqueued before starting; they accumulate and are processed
- * once a handler is registered via start().
+ * Creates a PostgresJobQueue backed by the shared Prisma client.
+ * The queue is created unstarted — call start(handler) to begin
+ * processing jobs. Jobs can be enqueued before starting; they
+ * persist in the database and are processed once a worker calls start().
  */
-export function getJobQueue(): InMemoryJobQueue {
+export function getJobQueue(): PostgresJobQueue {
   if (!globalForQueue.jobQueue) {
-    globalForQueue.jobQueue = new InMemoryJobQueue();
+    globalForQueue.jobQueue = new PostgresJobQueue(prisma);
   }
   return globalForQueue.jobQueue;
 }
