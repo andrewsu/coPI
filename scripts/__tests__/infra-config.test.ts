@@ -171,6 +171,57 @@ describe("docker-compose.prod.yml", () => {
   it("certbot runs renewal checks periodically", () => {
     expect(compose).toContain("certbot renew");
   });
+
+  describe("CloudWatch logging", () => {
+    // Validates that all services use the awslogs Docker logging driver
+    // to send container logs to AWS CloudWatch Logs for centralized
+    // monitoring on the pilot EC2 deployment.
+
+    const services = ["postgres", "migrate", "app", "worker", "nginx", "certbot"];
+
+    it("configures the awslogs logging driver on all services", () => {
+      for (const service of services) {
+        expect(compose).toContain(`awslogs-group: /copi/${service}`);
+      }
+    });
+
+    it("uses a dedicated /copi/<service> log group per service for isolation", () => {
+      // Each service gets its own log group so operators can tail individual
+      // services independently (e.g., `aws logs tail /copi/worker --follow`)
+      for (const service of services) {
+        const groupPattern = new RegExp(
+          `awslogs-group:\\s*/copi/${service}`
+        );
+        expect(compose).toMatch(groupPattern);
+      }
+    });
+
+    it("sets awslogs-stream-prefix on all services for readable stream names", () => {
+      for (const service of services) {
+        expect(compose).toContain(`awslogs-stream-prefix: ${service}`);
+      }
+    });
+
+    it("enables auto-creation of log groups on all services", () => {
+      // awslogs-create-group: "true" means the Docker daemon auto-creates
+      // the log group if it doesn't exist, avoiding manual setup
+      const createGroupCount = (compose.match(/awslogs-create-group:\s*"true"/g) || []).length;
+      expect(createGroupCount).toBe(services.length);
+    });
+
+    it("uses AWS_REGION variable with us-east-1 default", () => {
+      // All services should reference ${AWS_REGION:-us-east-1}
+      const regionRefCount = (compose.match(/awslogs-region:\s*\$\{AWS_REGION:-us-east-1\}/g) || []).length;
+      expect(regionRefCount).toBe(services.length);
+    });
+
+    it("documents IAM permissions required for CloudWatch logging", () => {
+      // The compose file header should document the required IAM permissions
+      expect(compose).toContain("logs:CreateLogGroup");
+      expect(compose).toContain("logs:CreateLogStream");
+      expect(compose).toContain("logs:PutLogEvents");
+    });
+  });
 });
 
 describe("init-letsencrypt.sh", () => {
@@ -243,5 +294,12 @@ describe(".env.example", () => {
 
   it("documents CERTBOT_STAGING variable for testing against staging CA", () => {
     expect(envExample).toContain("CERTBOT_STAGING=");
+  });
+
+  it("documents AWS_REGION usage for CloudWatch logging", () => {
+    // AWS_REGION is used by both the application (SES) and the awslogs
+    // Docker logging driver — the .env.example should mention both
+    expect(envExample).toContain("AWS_REGION=");
+    expect(envExample).toMatch(/CloudWatch|awslogs/i);
   });
 });

@@ -108,7 +108,7 @@
 - [ ] Set up DNS for copi.sulab.org
 - [ ] Deploy to EC2 instance
 - [ ] Configure environment variables
-- [ ] Set up CloudWatch logging
+- [x] Set up CloudWatch logging
 - [ ] Test full flow end-to-end on deployed instance
 
 ## Notes

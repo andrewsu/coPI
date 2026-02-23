@@ -27,7 +27,10 @@
 #   # Start all services
 #   docker compose -f docker-compose.prod.yml up -d
 #
-#   # View logs
+#   # View logs (via CloudWatch)
+#   aws logs tail /copi/app --follow
+#   aws logs tail /copi/worker --follow
+#   # Or via docker (fetched from CloudWatch):
 #   docker compose -f docker-compose.prod.yml logs -f app worker nginx
 #
 #   # Stop
@@ -42,6 +45,19 @@
 #   - DATABASE_URL in .env is ignored; the compose file constructs
 #     it from POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB to use
 #     the internal Docker network hostname.
+#
+# CloudWatch logging:
+#   All services use the awslogs Docker logging driver to send
+#   container stdout/stderr to AWS CloudWatch Logs. The EC2
+#   instance must have an IAM role with permissions:
+#     - logs:CreateLogGroup
+#     - logs:CreateLogStream
+#     - logs:PutLogEvents
+#   Log groups are auto-created under /copi/<service> (e.g.,
+#   /copi/app, /copi/worker). Set AWS_REGION in .env (default:
+#   us-east-1). View logs:
+#     aws logs tail /copi/app --follow
+#     aws logs tail /copi/worker --follow
 # -----------------------------------------------------------
 
 services:
@@ -63,6 +79,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-group: /copi/postgres
+        awslogs-stream-prefix: postgres
+        awslogs-create-group: "true"
     # No port exposure — only reachable within the Docker network.
     # Uncomment for direct DB access during debugging:
     # ports:
@@ -84,6 +107,13 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-group: /copi/migrate
+        awslogs-stream-prefix: migrate
+        awslogs-create-group: "true"
 
   # -----------------------------------------------------------
   # Next.js web application (standalone build)
@@ -114,6 +144,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-group: /copi/app
+        awslogs-stream-prefix: app
+        awslogs-create-group: "true"
 
   # -----------------------------------------------------------
   # Background job processor (profile generation, matching, email)
@@ -133,6 +170,13 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-group: /copi/worker
+        awslogs-stream-prefix: worker
+        awslogs-create-group: "true"
 
   # -----------------------------------------------------------
   # Nginx reverse proxy — HTTPS termination
@@ -162,6 +206,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-group: /copi/nginx
+        awslogs-stream-prefix: nginx
+        awslogs-create-group: "true"
     # Reload nginx every 6 hours to pick up renewed certificates
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
 
@@ -178,6 +229,13 @@ services:
     volumes:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-group: /copi/certbot
+        awslogs-stream-prefix: certbot
+        awslogs-create-group: "true"
     # Check for renewal every 12 hours (certbot best practice)
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done'"
 
