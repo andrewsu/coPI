@@ -19,13 +19,26 @@
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * Build an absolute URL using the public-facing origin when behind a reverse
+ * proxy (nginx). Falls back to request.url for local dev where there's no proxy.
+ */
+function buildUrl(path: string, request: NextRequest): URL {
+  const proto = request.headers.get("x-forwarded-proto");
+  const host = request.headers.get("x-forwarded-host");
+  if (proto && host) {
+    return new URL(path, `${proto}://${host}`);
+  }
+  return new URL(path, request.url);
+}
+
 export async function middleware(request: NextRequest) {
   const token = await getToken({ req: request });
 
   // Not authenticated → redirect to login
   if (!token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", request.url);
+    const loginUrl = buildUrl("/login", request);
+    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -39,7 +52,7 @@ export async function middleware(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     // Redirect to the dedicated /forbidden page.
-    const forbiddenUrl = new URL("/forbidden", request.url);
+    const forbiddenUrl = buildUrl("/forbidden", request);
     return NextResponse.redirect(forbiddenUrl);
   }
 

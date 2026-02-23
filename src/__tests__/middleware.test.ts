@@ -59,7 +59,7 @@ describe("middleware", () => {
       const location = response.headers.get("location")!;
       const url = new URL(location);
       expect(url.pathname).toBe("/login");
-      expect(url.searchParams.get("callbackUrl")).toBe("http://localhost:3000/");
+      expect(url.searchParams.get("callbackUrl")).toBe("/");
     });
 
     // Unauthenticated users trying to access admin routes should be redirected
@@ -324,7 +324,7 @@ describe("middleware", () => {
       const location = response.headers.get("location")!;
       const url = new URL(location);
       expect(url.searchParams.get("callbackUrl")).toBe(
-        "http://localhost:3000/admin/proposals/abc-123",
+        "/admin/proposals/abc-123",
       );
     });
   });
