@@ -120,7 +120,7 @@
 - [x] Build Users Overview page (`/admin/users`) — sortable/filterable table
 - [x] Build User Detail page (`/admin/users/[id]`) — profile, publications, match pool, proposals
 - [x] Build Proposals Overview page (`/admin/proposals`) — sortable/filterable table
-- [ ] Build Proposal Detail page (`/admin/proposals/[id]`) — full read-only view
+- [x] Build Proposal Detail page (`/admin/proposals/[id]`) — full read-only view
 - [ ] Build Matching Stats page (`/admin/stats`) — summary cards, matching results table, funnel
 - [x] Implement admin API routes (`/api/admin/users`, `/api/admin/proposals`, `/api/admin/stats`)
 - [ ] Add CLI commands for granting/revoking admin (`npm run admin:grant`, `npm run admin:revoke`)
