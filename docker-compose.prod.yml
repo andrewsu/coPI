@@ -73,7 +73,7 @@ services:
       driver: awslogs
       options:
         awslogs-group: /copi/postgres
-        awslogs-stream-prefix: postgres
+        tag: postgres
         awslogs-create-group: "true"
         awslogs-region: ${AWS_REGION:-us-east-2}
     # No port exposure — only reachable within the Docker network.
@@ -101,7 +101,7 @@ services:
       driver: awslogs
       options:
         awslogs-group: /copi/migrate
-        awslogs-stream-prefix: migrate
+        tag: migrate
         awslogs-create-group: "true"
         awslogs-region: ${AWS_REGION:-us-east-2}
 
@@ -138,7 +138,7 @@ services:
       driver: awslogs
       options:
         awslogs-group: /copi/app
-        awslogs-stream-prefix: app
+        tag: app
         awslogs-create-group: "true"
         awslogs-region: ${AWS_REGION:-us-east-2}
 
@@ -164,7 +164,7 @@ services:
       driver: awslogs
       options:
         awslogs-group: /copi/worker
-        awslogs-stream-prefix: worker
+        tag: worker
         awslogs-create-group: "true"
         awslogs-region: ${AWS_REGION:-us-east-2}
 
@@ -206,7 +206,7 @@ services:
       driver: awslogs
       options:
         awslogs-group: /copi/nginx
-        awslogs-stream-prefix: nginx
+        tag: nginx
         awslogs-create-group: "true"
         awslogs-region: ${AWS_REGION:-us-east-2}
 
@@ -229,7 +229,7 @@ services:
       driver: awslogs
       options:
         awslogs-group: /copi/certbot
-        awslogs-stream-prefix: certbot
+        tag: certbot
         awslogs-create-group: "true"
         awslogs-region: ${AWS_REGION:-us-east-2}
 
