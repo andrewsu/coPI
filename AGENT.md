@@ -117,6 +117,66 @@ npm run lint
 npm run type-check
 ```
 
+## Production Deployment
+
+### Server Access
+
+```bash
+ssh collab-proposer    # EC2 instance
+# App is in ~/coPI
+```
+
+### Deploying Updates
+
+```bash
+ssh collab-proposer "cd ~/coPI && git pull && docker compose -f docker-compose.prod.yml build app worker && docker compose -f docker-compose.prod.yml up -d app worker"
+```
+
+To deploy only the app (no worker changes):
+```bash
+ssh collab-proposer "cd ~/coPI && git pull && docker compose -f docker-compose.prod.yml build app && docker compose -f docker-compose.prod.yml up -d app"
+```
+
+### Running Migrations
+
+The `migrate` service runs `prisma migrate deploy` on container start, but it uses the **previously built** worker image. After adding new migrations, you must either:
+- Rebuild the worker image first (`docker compose -f docker-compose.prod.yml build worker`), then restart, OR
+- Run migrations manually: `docker compose -f docker-compose.prod.yml exec worker npx prisma migrate deploy`
+
+### Running CLI Commands
+
+CLI tools (`admin:grant`, `admin:revoke`, `seed`) must run in the **worker** container (not app — the app container is a standalone build with no source files):
+```bash
+ssh collab-proposer "cd ~/coPI && docker compose -f docker-compose.prod.yml exec worker npx tsx src/cli/admin-access.ts grant <ORCID>"
+ssh collab-proposer "cd ~/coPI && docker compose -f docker-compose.prod.yml exec worker npx tsx src/cli/seed-profiles.ts <ORCID>"
+```
+
+### Checking Status
+
+```bash
+# Container health
+ssh collab-proposer "cd ~/coPI && docker compose -f docker-compose.prod.yml ps"
+# App health endpoint
+ssh collab-proposer "curl -s https://copi.science/api/health"
+# App logs
+ssh collab-proposer "cd ~/coPI && docker compose -f docker-compose.prod.yml logs app --tail 50"
+# Nginx logs
+ssh collab-proposer "cd ~/coPI && docker compose -f docker-compose.prod.yml logs nginx --tail 50"
+```
+
+### Domain and SSL
+
+- **Domain:** `copi.science` (set via `DOMAIN` env var in `.env`)
+- **SSL:** Let's Encrypt via certbot; auto-renews every 12 hours
+- **First-time cert setup:** `./scripts/init-letsencrypt.sh` (only needed once)
+
+### Production Build Gotchas
+
+1. **Server component pages that query Prisma** must have `export const dynamic = 'force-dynamic'` to prevent static pre-rendering at build time (which fails without a live database). All admin pages have this.
+2. **The Dockerfile sets dummy build-time env vars** (`DATABASE_URL`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`) so `next build` can pre-render client component pages that transitively import auth config. Real values are injected at runtime via docker-compose.
+3. **Middleware behind nginx** must use `X-Forwarded-Proto` and `X-Forwarded-Host` headers to construct redirect URLs with the public origin. Using `request.url` directly yields the internal Docker hostname (`0.0.0.0:3000`). The `buildUrl()` helper in `src/middleware.ts` handles this.
+4. **Unused variables cause build failures** — `next build` with `output: "standalone"` is stricter than `next dev`. Both unused imports and declared-but-never-read variables fail the type check.
+
 ## Environment Notes
 
 1. **WSL2 (Ubuntu 24.04).** This project runs inside WSL2, not native Windows.
@@ -229,7 +289,7 @@ npm run type-check
 
 53. **Health check endpoint:** `GET /api/health` returns `{ status, timestamp, checks }` where `checks.database` is `"ok"` or `"unreachable"`. Returns 200 when healthy, 503 when degraded. Excluded from auth middleware (`src/middleware.ts`) so Docker HEALTHCHECK, load balancers, and uptime monitors can probe without authentication. Tests: `health/__tests__/route.test.ts` (3 tests). Focused verification: `source ~/.nvm/nvm.sh && npx jest src/app/api/health/__tests__/route.test.ts`.
 
-54. **Production Docker Compose:** `docker-compose.prod.yml` runs the full stack for pilot deployment on a single EC2 instance. Six services: `postgres` (PostgreSQL 16 with health check), `migrate` (one-shot Prisma migration runner using worker image, runs `prisma migrate deploy`), `app` (Next.js standalone server — uses `expose` not `ports`, only reachable via nginx), `worker` (background job processor), `nginx` (reverse proxy with HTTPS termination via Let's Encrypt), `certbot` (automatic certificate renewal every 12 hours). The `app` and `worker` services depend on `postgres` being healthy AND `migrate` completing successfully (`service_completed_successfully` — requires Docker Compose v2). `nginx` depends on `app` being healthy. `DATABASE_URL` is constructed from `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` env vars to use the Docker-internal `postgres` hostname, overriding any `DATABASE_URL` in `.env`. Required env vars: `POSTGRES_PASSWORD`, `DOMAIN` (e.g., `copi.sulab.org`), `CERTBOT_EMAIL` (for Let's Encrypt notifications). The app health check probes `GET /api/health` via wget. Nginx exposes ports 80 (HTTP→HTTPS redirect + ACME challenges) and 443 (HTTPS). No ports are exposed for postgres or the app (internal only). The dev `docker-compose.yml` is kept separate — it only runs postgres for local development. Validation: `docker compose -f docker-compose.prod.yml --env-file <file-with-required-vars> config --quiet`. Note: on WSL2 with Docker Desktop, environment variables passed inline (e.g., `POSTGRES_PASSWORD=x docker.exe compose ...`) don't propagate to `docker.exe`; use `--env-file` or a `.env` file instead.
+54. **Production Docker Compose:** `docker-compose.prod.yml` runs the full stack for pilot deployment on a single EC2 instance. Six services: `postgres` (PostgreSQL 16 with health check), `migrate` (one-shot Prisma migration runner using worker image, runs `prisma migrate deploy`), `app` (Next.js standalone server — uses `expose` not `ports`, only reachable via nginx), `worker` (background job processor), `nginx` (reverse proxy with HTTPS termination via Let's Encrypt), `certbot` (automatic certificate renewal every 12 hours). The `app` and `worker` services depend on `postgres` being healthy AND `migrate` completing successfully (`service_completed_successfully` — requires Docker Compose v2). `nginx` depends on `app` being healthy. `DATABASE_URL` is constructed from `POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB` env vars to use the Docker-internal `postgres` hostname, overriding any `DATABASE_URL` in `.env`. Required env vars: `POSTGRES_PASSWORD`, `DOMAIN` (e.g., `copi.science`), `CERTBOT_EMAIL` (for Let's Encrypt notifications). The app health check probes `GET /api/health` via wget. Nginx exposes ports 80 (HTTP→HTTPS redirect + ACME challenges) and 443 (HTTPS). No ports are exposed for postgres or the app (internal only). The dev `docker-compose.yml` is kept separate — it only runs postgres for local development. Validation: `docker compose -f docker-compose.prod.yml --env-file <file-with-required-vars> config --quiet`. Note: on WSL2 with Docker Desktop, environment variables passed inline (e.g., `POSTGRES_PASSWORD=x docker.exe compose ...`) don't propagate to `docker.exe`; use `--env-file` or a `.env` file instead.
 
 55. **HTTPS via nginx + Let's Encrypt (certbot):** `nginx/nginx.conf` is an nginx server config template using the `${DOMAIN}` variable (substituted at container startup by the nginx Docker image's built-in envsubst on `/etc/nginx/templates/*.template`). The HTTP server block on port 80 serves ACME challenges at `/.well-known/acme-challenge/` (webroot at `/var/www/certbot`) and redirects everything else to HTTPS. The HTTPS server block on port 443 uses TLS 1.2+, OCSP stapling, HSTS (2 years), and security headers (X-Frame-Options DENY, X-Content-Type-Options nosniff). The `certbot` service mounts `./certbot/conf:/etc/letsencrypt` (read-write) and `./certbot/www:/var/www/certbot` (read-write), running `certbot renew --quiet` every 12 hours. The `nginx` service mounts the same volumes read-only and reloads every 6 hours to pick up renewed certificates. **First-time setup:** Run `./scripts/init-letsencrypt.sh` which: (1) creates a temporary self-signed cert so nginx can start on 443, (2) starts nginx, (3) replaces the temp cert with a real Let's Encrypt cert via certbot webroot mode, (4) reloads nginx. Supports `CERTBOT_STAGING=1` env var for testing against Let's Encrypt's staging CA. The `certbot/` directory (containing live certificates) is gitignored and dockerignored. The `scripts/` directory is also dockerignored. Tests: `scripts/__tests__/infra-config.test.ts` (35 tests) validates the nginx config directives, docker-compose service structure, init script safety features, and .env.example documentation. `jest.config.ts` roots include both `src/` and `scripts/` for this test. Focused verification: `source ~/.nvm/nvm.sh && npx jest scripts/__tests__/infra-config.test.ts`.
 
