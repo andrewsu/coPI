@@ -46,7 +46,7 @@ export default async function AdminStatsPage() {
     totalProposals,
     totalMatches,
     matchingResults,
-    interestedSwipeCount,
+    _interestedSwipeCount,
     proposalsWithInterestedSwipe,
   ] = await Promise.all([
     prisma.user.count({ where: { deletedAt: null } }),
