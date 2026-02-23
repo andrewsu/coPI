@@ -45,6 +45,12 @@ export default function AdminLayout({
               >
                 Stats
               </Link>
+              <Link
+                href="/admin/jobs"
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Jobs
+              </Link>
             </nav>
           </div>
           <Link
