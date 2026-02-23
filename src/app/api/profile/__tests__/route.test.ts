@@ -213,8 +213,8 @@ describe("PUT /api/profile", () => {
     );
   });
 
-  it("returns 422 when key targets is empty", async () => {
-    /** At least 1 key target is required. */
+  it("accepts empty key targets (optional field)", async () => {
+    /** Key targets are optional — empty array should not cause validation failure. */
     mockGetServerSession.mockResolvedValue({
       user: { id: "user-1" },
     });
@@ -222,13 +222,10 @@ describe("PUT /api/profile", () => {
       id: "profile-1",
       profileVersion: 1,
     } as never);
+    mockUpdate.mockResolvedValue({} as never);
 
     const res = await PUT(makePutRequest(validPayload({ keyTargets: [] })));
-    expect(res.status).toBe(422);
-    const data = await res.json();
-    expect(data.details).toEqual(
-      expect.arrayContaining([expect.stringContaining("key target")]),
-    );
+    expect(res.status).toBe(200);
   });
 
   it("updates profile and bumps version on valid input", async () => {
@@ -325,8 +322,8 @@ describe("PUT /api/profile", () => {
     );
     expect(res.status).toBe(422);
     const data = await res.json();
-    // Should have at least 4 errors: summary, techniques, disease areas, key targets
-    expect(data.details.length).toBeGreaterThanOrEqual(4);
+    // Should have at least 3 errors: summary, techniques, disease areas (key targets is optional)
+    expect(data.details.length).toBeGreaterThanOrEqual(3);
   });
 
   it("returns 400 for malformed JSON body", async () => {

@@ -298,13 +298,14 @@ describe("signIn callback", () => {
 });
 
 describe("jwt callback", () => {
-  // The jwt callback stores the database user ID and ORCID in the JWT token.
+  // The jwt callback stores the database user ID, ORCID, and isAdmin in the JWT token.
   // This only happens on initial sign-in (when user and account are present).
 
-  it("stores database user ID in token on sign-in", async () => {
+  it("stores database user ID and isAdmin in token on sign-in", async () => {
     (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: "db-uuid-100",
       orcid: "0000-0001-2345-6789",
+      isAdmin: false,
     });
 
     const result = await callJwt(
@@ -315,6 +316,25 @@ describe("jwt callback", () => {
 
     expect(result.userId).toBe("db-uuid-100");
     expect(result.orcid).toBe("0000-0001-2345-6789");
+    expect(result.isAdmin).toBe(false);
+  });
+
+  it("stores isAdmin=true in token for admin users", async () => {
+    /** Admin users should have isAdmin=true propagated to the JWT
+     *  so the session callback can expose it to the client. */
+    (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
+      id: "admin-uuid-1",
+      orcid: "0000-0001-9999-0001",
+      isAdmin: true,
+    });
+
+    const result = await callJwt(
+      { sub: "test" },
+      { id: "0000-0001-9999-0001", name: "Admin User" },
+      { provider: "orcid" }
+    );
+
+    expect(result.isAdmin).toBe(true);
   });
 
   it("preserves existing token on subsequent requests (no user)", async () => {
@@ -322,21 +342,23 @@ describe("jwt callback", () => {
       sub: "test",
       userId: "db-uuid-100",
       orcid: "0000-0001-2345-6789",
+      isAdmin: false,
     };
 
     const result = await callJwt(existingToken);
 
     expect(result.userId).toBe("db-uuid-100");
     expect(result.orcid).toBe("0000-0001-2345-6789");
+    expect(result.isAdmin).toBe(false);
     expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
   });
 });
 
 describe("session callback", () => {
-  // The session callback exposes user ID and ORCID from the JWT to the client session.
-  // This is how client-side code (useSession) gets the database user ID.
+  // The session callback exposes user ID, ORCID, and isAdmin from the JWT to the client session.
+  // This is how client-side code (useSession) gets the database user ID and admin status.
 
-  it("adds user ID and ORCID to session", async () => {
+  it("adds user ID, ORCID, and isAdmin to session", async () => {
     const session = {
       user: { name: "Jane", email: "jane@test.com" },
       expires: "2099-01-01",
@@ -345,12 +367,53 @@ describe("session callback", () => {
       sub: "test",
       userId: "db-uuid-200",
       orcid: "0000-0001-2345-6789",
+      isAdmin: false,
     };
 
     const result = await callSession(session, token);
 
     expect((result as any).user.id).toBe("db-uuid-200");
     expect((result as any).user.orcid).toBe("0000-0001-2345-6789");
+    expect((result as any).user.isAdmin).toBe(false);
+  });
+
+  it("exposes isAdmin=true for admin users", async () => {
+    /** Verifies admin status flows from JWT to client-visible session,
+     *  enabling UI features like the admin dashboard link. */
+    const session = {
+      user: { name: "Admin", email: "admin@test.com" },
+      expires: "2099-01-01",
+    };
+    const token: JWT = {
+      sub: "test",
+      userId: "admin-uuid-1",
+      orcid: "0000-0001-9999-0001",
+      isAdmin: true,
+    };
+
+    const result = await callSession(session, token);
+
+    expect((result as any).user.isAdmin).toBe(true);
+  });
+
+  it("defaults isAdmin to false when not set in token", async () => {
+    /** When the JWT token lacks isAdmin (e.g., tokens issued before
+     *  the isAdmin migration), the session should default to false
+     *  rather than undefined. */
+    const session = {
+      user: { name: "Old Token User", email: "old@test.com" },
+      expires: "2099-01-01",
+    };
+    const token: JWT = {
+      sub: "test",
+      userId: "db-uuid-300",
+      orcid: "0000-0001-0000-0099",
+      // isAdmin intentionally omitted — simulates pre-migration JWT
+    };
+
+    const result = await callSession(session, token);
+
+    expect((result as any).user.isAdmin).toBe(false);
   });
 });
 

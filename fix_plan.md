@@ -113,7 +113,7 @@
 
 ## Phase 10: Admin Dashboard
 
-- [ ] Add `isAdmin` boolean field to User model, run migration
+- [x] Add `isAdmin` boolean field to User model, run migration
 - [ ] Implement admin route protection middleware (check `isAdmin` on session)
 - [ ] Build 403 page for non-admin users
 - [ ] Add admin link to nav/header (visible only to admin users)
@@ -147,3 +147,5 @@
 - ~~`match-pool/page.tsx` used `useSearchParams()` without a Suspense boundary, causing prerender failure during `next build` with `output: "standalone"`~~ — Fixed by wrapping in Suspense.
 - ~~`unsubscribe-token.ts` had a TypeScript strict-mode error (array index access returning `string | undefined` under `noUncheckedIndexedAccess`) that only manifested during standalone builds~~ — Fixed with non-null assertions after length guard.
 - ~~`proposals-digest.ts` `selectTopProposal()` had a similar `noUncheckedIndexedAccess` issue with `sort(...)[0]` returning `T | undefined`~~ — Fixed with non-null assertion (callers guarantee non-empty array).
+- ~~Tests for `keyTargets` validation (`profile-synthesis-prompt.test.ts`, `profile/route.test.ts`) still expected `keyTargets: []` to be rejected, but the validation code was already updated to make `keyTargets` optional (MIN_KEY_TARGETS=0). Tests also expected ≥4 simultaneous errors but got 3 since empty key_targets no longer generates an error.~~ — Fixed by updating tests to match the optional-keyTargets behavior.
+- ~~`docker-compose.prod.yml` was missing CloudWatch `awslogs` logging driver configuration on all 6 services, and the header lacked IAM permission documentation.~~ — Fixed by adding `logging:` blocks and IAM permissions note.

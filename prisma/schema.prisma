@@ -59,6 +59,7 @@ model User {
   department  String?
   orcid     String   @unique
 
+  isAdmin                   Boolean @default(false) @map("is_admin")
   allowIncomingProposals    Boolean @default(false) @map("allow_incoming_proposals")
   emailVisibility           EmailVisibility @default(mutual_matches) @map("email_visibility")
   emailNotificationsEnabled Boolean @default(true) @map("email_notifications_enabled")

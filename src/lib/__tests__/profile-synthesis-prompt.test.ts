@@ -537,13 +537,11 @@ describe("profile-synthesis-prompt", () => {
       expect(result.diseaseAreasCount).toBe(0);
     });
 
-    /** Zero key targets should fail validation. */
-    it("rejects empty key_targets", () => {
+    /** Empty key targets are acceptable — the field is optional (same as keywords). */
+    it("accepts empty key_targets array (optional field)", () => {
       const output = makeValidOutput({ key_targets: [] });
       const result = validateSynthesisOutput(output);
-      expect(result.valid).toBe(false);
-      expect(result.errors.some((e) => e.field === "key_targets")).toBe(true);
-      expect(result.keyTargetsCount).toBe(0);
+      expect(result.errors.some((e) => e.field === "key_targets")).toBe(false);
     });
 
     /** Empty keywords are acceptable — the field is optional. */
@@ -564,7 +562,7 @@ describe("profile-synthesis-prompt", () => {
       });
       const result = validateSynthesisOutput(output);
       expect(result.valid).toBe(false);
-      expect(result.errors.length).toBeGreaterThanOrEqual(4);
+      expect(result.errors.length).toBeGreaterThanOrEqual(3);
     });
   });
 

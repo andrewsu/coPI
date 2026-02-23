@@ -213,11 +213,12 @@ export const authOptions: NextAuthOptions = {
         const orcid = user.id;
         const dbUser = await prisma.user.findUnique({
           where: { orcid },
-          select: { id: true, orcid: true },
+          select: { id: true, orcid: true, isAdmin: true },
         });
         if (dbUser) {
           token.userId = dbUser.id;
           token.orcid = dbUser.orcid;
+          token.isAdmin = dbUser.isAdmin;
         }
       }
       return token;
@@ -230,6 +231,7 @@ export const authOptions: NextAuthOptions = {
       if (token.orcid) {
         session.user.orcid = token.orcid;
       }
+      session.user.isAdmin = token.isAdmin ?? false;
       return session;
     },
   },

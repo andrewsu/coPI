@@ -42,6 +42,8 @@
 #   - DATABASE_URL in .env is ignored; the compose file constructs
 #     it from POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB to use
 #     the internal Docker network hostname.
+#   - EC2 instance IAM role must have these CloudWatch Logs permissions:
+#     logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents
 # -----------------------------------------------------------
 
 services:
@@ -63,6 +65,13 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /copi/postgres
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-stream-prefix: postgres
+        awslogs-create-group: "true"
     # No port exposure — only reachable within the Docker network.
     # Uncomment for direct DB access during debugging:
     # ports:
@@ -84,6 +93,13 @@ services:
       postgres:
         condition: service_healthy
     restart: "no"
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /copi/migrate
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-stream-prefix: migrate
+        awslogs-create-group: "true"
 
   # -----------------------------------------------------------
   # Next.js web application (standalone build)
@@ -114,6 +130,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /copi/app
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-stream-prefix: app
+        awslogs-create-group: "true"
 
   # -----------------------------------------------------------
   # Background job processor (profile generation, matching, email)
@@ -133,6 +156,13 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /copi/worker
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-stream-prefix: worker
+        awslogs-create-group: "true"
 
   # -----------------------------------------------------------
   # Nginx reverse proxy — HTTPS termination
@@ -168,6 +198,13 @@ services:
     # The reload loop is backgrounded AFTER envsubst completes to avoid
     # a race where nginx starts before the config template is rendered.
     command: "/bin/sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh && (while :; do sleep 6h & wait $${!}; nginx -s reload; done &) && nginx -g \"daemon off;\"'"
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /copi/nginx
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-stream-prefix: nginx
+        awslogs-create-group: "true"
 
   # -----------------------------------------------------------
   # Certbot — Let's Encrypt certificate renewal
@@ -184,6 +221,13 @@ services:
       - ./certbot/www:/var/www/certbot
     # Check for renewal every 12 hours (certbot best practice)
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done'"
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /copi/certbot
+        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-stream-prefix: certbot
+        awslogs-create-group: "true"
 
 volumes:
   pgdata:
