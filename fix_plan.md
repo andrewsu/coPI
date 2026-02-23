@@ -123,7 +123,7 @@
 - [x] Build Proposal Detail page (`/admin/proposals/[id]`) — full read-only view
 - [x] Build Matching Stats page (`/admin/stats`) — summary cards, matching results table, funnel
 - [x] Implement admin API routes (`/api/admin/users`, `/api/admin/proposals`, `/api/admin/stats`)
-- [ ] Add CLI commands for granting/revoking admin (`npm run admin:grant`, `npm run admin:revoke`)
+- [x] Add CLI commands for granting/revoking admin (`npm run admin:grant`, `npm run admin:revoke`)
 
 ## Notes
 
