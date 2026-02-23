@@ -101,7 +101,7 @@
 
 ## Phase 9: Deployment
 
-- [ ] Create Dockerfile for the app
+- [x] Create Dockerfile for the app
 - [ ] Create Docker Compose for production (app + worker + postgres)
 - [ ] Configure HTTPS (Let's Encrypt)
 - [ ] Set up DNS for copi.sulab.org
@@ -129,3 +129,7 @@
 - User-submitted text management: the spec requires re-synthesis when texts are added/modified. This trigger should be implemented as part of the "Implement profile refresh (manual trigger)" task. Currently, saving texts only updates the JSONB field; the user must manually refresh their profile for changes to take effect in synthesis.
 - ~~Swipe queue page currently uses Previous/Next navigation buttons as temporary placeholders for browsing proposals.~~ Replaced by Interested/Archive swipe action buttons with match detection, visibility transitions, and analytics tracking (viewedDetail, timeSpentMs).
 - Monthly refresh currently runs per-user via `monthly_refresh` queue jobs. The recurring scheduler that enqueues these jobs for all users on a configurable cadence is still pending infrastructure wiring.
+- ~~Route files exported non-HTTP constants (`SURVEY_INTERVAL` in swipe route, `VALID_FAILURE_MODES` in survey route) which are invalid in Next.js App Router and caused `next build` to fail~~ — Fixed by removing `export` keyword (constants are only used within their route files).
+- ~~`match-pool/page.tsx` used `useSearchParams()` without a Suspense boundary, causing prerender failure during `next build` with `output: "standalone"`~~ — Fixed by wrapping in Suspense.
+- ~~`unsubscribe-token.ts` had a TypeScript strict-mode error (array index access returning `string | undefined` under `noUncheckedIndexedAccess`) that only manifested during standalone builds~~ — Fixed with non-null assertions after length guard.
+- ~~`proposals-digest.ts` `selectTopProposal()` had a similar `noUncheckedIndexedAccess` issue with `sort(...)[0]` returning `T | undefined`~~ — Fixed with non-null assertion (callers guarantee non-empty array).

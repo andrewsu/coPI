@@ -24,7 +24,7 @@ import { sendMatchNotificationEmails } from "@/services/match-notifications";
 import { sendRecruitmentEmailIfUnclaimed } from "@/services/recruitment-email";
 
 /** Show the periodic survey after every Nth archive action per spec. */
-export const SURVEY_INTERVAL = 5;
+const SURVEY_INTERVAL = 5;
 
 interface SwipeRequestBody {
   direction: "interested" | "archive";

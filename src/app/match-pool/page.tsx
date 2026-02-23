@@ -19,7 +19,7 @@
 
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -94,6 +94,20 @@ function sourceBadgeClass(source: MatchPoolEntry["source"]): string {
 }
 
 export default function MatchPoolPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center">
+          <p className="animate-pulse text-gray-400">Loading your match pool...</p>
+        </main>
+      }
+    >
+      <MatchPoolContent />
+    </Suspense>
+  );
+}
+
+function MatchPoolContent() {
   const { status: sessionStatus } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();

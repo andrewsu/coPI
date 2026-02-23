@@ -227,5 +227,5 @@ function selectTopProposal(
     if (confA !== confB) return confA - confB;
     // More recent first
     return b.createdAt.getTime() - a.createdAt.getTime();
-  })[0];
+  })[0]!; // Callers guarantee non-empty array
 }

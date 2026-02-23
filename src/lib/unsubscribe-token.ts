@@ -91,7 +91,8 @@ export function verifyUnsubscribeToken(
   const parts = token.split(".");
   if (parts.length !== 2) return null;
 
-  const [payloadStr, providedSig] = parts;
+  const payloadStr = parts[0]!;
+  const providedSig = parts[1]!;
   const expectedSig = sign(payloadStr, getSecret());
 
   // Constant-time comparison to prevent timing attacks

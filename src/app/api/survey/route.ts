@@ -16,7 +16,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 /** The valid failure mode options per spec. */
-export const VALID_FAILURE_MODES = [
+const VALID_FAILURE_MODES = [
   "scientifically_nonsensical",
   "scientifically_uninteresting",
   "lack_of_synergy",
