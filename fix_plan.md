@@ -85,7 +85,7 @@
 
 - [x] Set up AWS SES email sending
 - [x] Implement match notification email (immediate)
-- [ ] Implement new proposals digest email (weekly batch)
+- [x] Implement new proposals digest email (weekly batch)
 - [ ] Implement profile refresh notification email
 - [ ] Implement unclaimed profile recruitment email (with rate limiting)
 - [ ] Implement user-facing invite template for unclaimed profiles

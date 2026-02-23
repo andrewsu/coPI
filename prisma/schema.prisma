@@ -66,6 +66,8 @@ model User {
   notifyNewProposals        Boolean @default(true) @map("notify_new_proposals")
   notifyProfileRefresh      Boolean @default(true) @map("notify_profile_refresh")
 
+  lastDigestSentAt DateTime? @map("last_digest_sent_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
