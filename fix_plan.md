@@ -117,7 +117,7 @@
 - [x] Implement admin route protection middleware (check `isAdmin` on session)
 - [ ] Build 403 page for non-admin users
 - [ ] Add admin link to nav/header (visible only to admin users)
-- [ ] Build Users Overview page (`/admin/users`) — sortable/filterable table
+- [x] Build Users Overview page (`/admin/users`) — sortable/filterable table
 - [ ] Build User Detail page (`/admin/users/[id]`) — profile, publications, match pool, proposals
 - [ ] Build Proposals Overview page (`/admin/proposals`) — sortable/filterable table
 - [ ] Build Proposal Detail page (`/admin/proposals/[id]`) — full read-only view
