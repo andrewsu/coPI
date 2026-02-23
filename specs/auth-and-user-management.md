@@ -10,8 +10,8 @@ CoPI uses ORCID OAuth exclusively. No email/password authentication. ORCID canno
 2. Redirect to ORCID OAuth authorization endpoint
 3. User authenticates on ORCID
 4. ORCID redirects back with authorization code
-5. Backend exchanges code for access token
-6. Backend fetches user's ORCID ID, name, and email from ORCID API
+5. Backend exchanges code for access token (scope: `/authenticate`)
+6. Backend fetches user's ORCID ID, name, and email from ORCID Public API (pub.orcid.org)
 7. If ORCID ID matches an existing User record → log in (handles seeded profile claiming)
 8. If no matching User record → create new account
 

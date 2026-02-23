@@ -57,7 +57,7 @@ CoPI is a Next.js web application deployed on AWS. PostgreSQL database, async jo
 
 | API | Purpose | Auth |
 |---|---|---|
-| ORCID OAuth | User authentication | OAuth 2.0 client credentials |
+| ORCID OAuth | User authentication | OAuth 2.0 Public API, `/authenticate` scope |
 | ORCID Public API | Profile, grants, works | No auth needed for public data |
 | PubMed E-utilities | Abstracts, article metadata | API key recommended (10 req/sec vs 3 req/sec) |
 | PMC E-utilities | Full-text methods sections | Same API key as PubMed |

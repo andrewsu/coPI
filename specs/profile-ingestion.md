@@ -165,7 +165,7 @@ Before saving, check:
 - Research summary is 150-250 words
 - At least 3 techniques listed
 - At least 1 disease area or biological process listed
-- Key targets array is non-empty
+- Key targets array is present (may be empty)
 
 If validation fails: re-run synthesis once with stricter prompt. If it fails again, save what we have and flag for review.
 
