@@ -21,7 +21,11 @@ jest.mock("@/services/profile-pipeline");
 jest.mock("@/services/monthly-refresh");
 jest.mock("@/services/match-pool-expansion");
 jest.mock("@/services/matching-triggers");
+jest.mock("@/services/email-service");
 jest.mock("@/lib/pipeline-status");
+jest.mock("@/lib/ses", () => ({
+  sesClient: {},
+}));
 
 import { computeEligiblePairs } from "@/services/eligible-pairs";
 import { assembleContextForPair } from "@/services/matching-context";
@@ -34,6 +38,7 @@ import { runMonthlyRefresh } from "@/services/monthly-refresh";
 import { expandMatchPoolsForNewUser } from "@/services/match-pool-expansion";
 import { triggerMatchingForNewPairs } from "@/services/matching-triggers";
 import { setPipelineStage } from "@/lib/pipeline-status";
+import { sendTemplatedEmail } from "@/services/email-service";
 
 const mockComputeEligiblePairs = computeEligiblePairs as jest.MockedFunction<
   typeof computeEligiblePairs
@@ -62,6 +67,9 @@ const mockTriggerMatchingForNewPairs =
   >;
 const mockSetPipelineStage = setPipelineStage as jest.MockedFunction<
   typeof setPipelineStage
+>;
+const mockSendTemplatedEmail = sendTemplatedEmail as jest.MockedFunction<
+  typeof sendTemplatedEmail
 >;
 
 // Shared test fixtures
@@ -92,6 +100,7 @@ beforeEach(() => {
     affectedUserIds: [],
   });
   mockTriggerMatchingForNewPairs.mockResolvedValue(0);
+  mockSendTemplatedEmail.mockResolvedValue({ success: true, devMode: true });
   jest.spyOn(console, "log").mockImplementation(() => {});
   jest.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -524,7 +533,34 @@ describe("run_matching handler", () => {
 });
 
 describe("auxiliary job type handlers", () => {
-  it("handles send_email without throwing", async () => {
+  /** Verifies the send_email handler delegates to the email service with correct arguments. */
+  it("handles send_email by calling sendTemplatedEmail", async () => {
+    const processor = createJobProcessor(mockDeps);
+    await processor(
+      makeQueuedJob({
+        type: "send_email",
+        templateId: "match_notification",
+        to: "user@example.com",
+        data: { recipientName: "Smith", matchedResearcherName: "Jones" },
+      }),
+    );
+
+    expect(mockSendTemplatedEmail).toHaveBeenCalledTimes(1);
+    expect(mockSendTemplatedEmail).toHaveBeenCalledWith(
+      expect.anything(), // SES client
+      "match_notification",
+      "user@example.com",
+      { recipientName: "Smith", matchedResearcherName: "Jones" },
+    );
+  });
+
+  /** Email service errors should propagate for queue retry with exponential backoff. */
+  it("rethrows send_email failures for queue retry", async () => {
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    mockSendTemplatedEmail.mockRejectedValueOnce(
+      new Error("SES throttling"),
+    );
+
     const processor = createJobProcessor(mockDeps);
     await expect(
       processor(
@@ -532,10 +568,36 @@ describe("auxiliary job type handlers", () => {
           type: "send_email",
           templateId: "match_notification",
           to: "user@example.com",
-          data: { matchId: "m1" },
+          data: {},
         }),
       ),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("SES throttling");
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("send_email failed"),
+    );
+  });
+
+  it("logs SES message ID on successful send", async () => {
+    mockSendTemplatedEmail.mockResolvedValueOnce({
+      success: true,
+      messageId: "ses-abc-123",
+    });
+
+    const logSpy = jest.spyOn(console, "log");
+    const processor = createJobProcessor(mockDeps);
+    await processor(
+      makeQueuedJob({
+        type: "send_email",
+        templateId: "new_proposals_digest",
+        to: "user@example.com",
+        data: {},
+      }),
+    );
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("messageId=ses-abc-123"),
+    );
   });
 
   it("handles monthly_refresh by invoking the refresh service", async () => {

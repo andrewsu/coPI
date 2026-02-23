@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@aws-sdk/client-ses": "^3.995.0",
     "@prisma/client": "^6.3.0",
     "fast-xml-parser": "^5.3.7",
     "next": "^15.1.0",

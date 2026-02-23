@@ -8,11 +8,11 @@
  *   - generate_profile: calls runProfilePipeline
  *   - run_matching: calls eligible pair computation + context assembly +
  *     proposal generation + storage
+ *   - send_email: renders template and sends via SES (or logs in dev mode)
  *   - expand_match_pool: adds new user to existing affiliation/all-users
  *     selections, then triggers matching for new pairs
- *
- * Future handlers (services not yet built):
- *   - send_email
+ *   - monthly_refresh: checks for new publications and generates candidate
+ *     profile updates
  */
 
 import type { PrismaClient } from "@prisma/client";
@@ -21,6 +21,7 @@ import type {
   QueuedJob,
   GenerateProfileJob,
   RunMatchingJob,
+  SendEmailJob,
   ExpandMatchPoolJob,
   MonthlyRefreshJob,
 } from "@/lib/job-queue";
@@ -37,6 +38,8 @@ import { expandMatchPoolsForNewUser } from "@/services/match-pool-expansion";
 import { triggerMatchingForNewPairs } from "@/services/matching-triggers";
 import { setPipelineStage } from "@/lib/pipeline-status";
 import { runMonthlyRefresh } from "@/services/monthly-refresh";
+import { sendTemplatedEmail } from "@/services/email-service";
+import { sesClient } from "@/lib/ses";
 
 // --- Public types ---
 
@@ -73,10 +76,7 @@ export function createJobProcessor(
         break;
 
       case "send_email":
-        console.log(
-          `[Worker] send_email job ${job.id}: handler not yet implemented. ` +
-            `Template: ${payload.templateId}, To: ${payload.to}`,
-        );
+        await handleSendEmail(payload);
         break;
 
       case "monthly_refresh":
@@ -141,6 +141,35 @@ async function handleGenerateProfile(
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     setPipelineStage(userId, "error", { error: errorMessage });
+    throw err;
+  }
+}
+
+/**
+ * Renders an email template and sends it via SES.
+ *
+ * Uses the email service to look up the template by ID, render it
+ * with the job's data payload, and send via SES. In dev mode (no AWS
+ * credentials), the email is logged to console instead.
+ *
+ * Re-throws errors to trigger queue retry with exponential backoff.
+ */
+async function handleSendEmail(payload: SendEmailJob): Promise<void> {
+  const { templateId, to, data } = payload;
+
+  try {
+    const result = await sendTemplatedEmail(sesClient, templateId, to, data);
+
+    const modeLabel = result.devMode ? " (dev mode)" : "";
+    const idLabel = result.messageId ? ` messageId=${result.messageId}` : "";
+    console.log(
+      `[Worker] send_email: template=${templateId}, to=${to}${modeLabel}${idLabel}`,
+    );
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[Worker] send_email failed: template=${templateId}, to=${to}: ${errorMessage}`,
+    );
     throw err;
   }
 }
