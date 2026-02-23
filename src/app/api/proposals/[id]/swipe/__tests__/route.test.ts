@@ -34,10 +34,14 @@ jest.mock("@/lib/prisma", () => ({
 jest.mock("@/services/match-notifications", () => ({
   sendMatchNotificationEmails: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock("@/services/recruitment-email", () => ({
+  sendRecruitmentEmailIfUnclaimed: jest.fn().mockResolvedValue({ sent: false }),
+}));
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import { sendMatchNotificationEmails } from "@/services/match-notifications";
+import { sendRecruitmentEmailIfUnclaimed } from "@/services/recruitment-email";
 
 const mockGetServerSession = jest.mocked(getServerSession);
 const mockFindUnique = jest.mocked(prisma.collaborationProposal.findUnique);
@@ -46,6 +50,7 @@ const mockSwipeCreate = jest.mocked(prisma.swipe.create);
 const mockSwipeCount = jest.mocked(prisma.swipe.count);
 const mockMatchCreate = jest.mocked(prisma.match.create);
 const mockSendMatchNotifications = jest.mocked(sendMatchNotificationEmails);
+const mockSendRecruitmentEmail = jest.mocked(sendRecruitmentEmailIfUnclaimed);
 
 const { POST } = require("../route");
 
@@ -735,5 +740,82 @@ describe("POST /api/proposals/[id]/swipe", () => {
     );
 
     expect(mockSendMatchNotifications).not.toHaveBeenCalled();
+  });
+
+  // --- Recruitment Email Triggers ---
+
+  it("triggers recruitment email for the other user on interested swipe", async () => {
+    /** When user A swipes interested, the recruitment email service should be
+     *  called with the other user's ID so it can check if they are unclaimed. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-recruit-1",
+      direction: "interested",
+      viewedDetail: true,
+      timeSpentMs: 3000,
+    } as never);
+
+    await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: true,
+        timeSpentMs: 3000,
+      })
+    );
+
+    expect(mockSendRecruitmentEmail).toHaveBeenCalledWith(
+      prisma,
+      "user-zzz",
+      "proposal-1",
+    );
+  });
+
+  it("triggers recruitment email with correct other user from B perspective", async () => {
+    /** When user B swipes interested, recruitment email targets user A. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-zzz" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-recruit-2",
+      direction: "interested",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+
+    await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: false,
+      })
+    );
+
+    expect(mockSendRecruitmentEmail).toHaveBeenCalledWith(
+      prisma,
+      "user-aaa",
+      "proposal-1",
+    );
+  });
+
+  it("does not trigger recruitment email for archive swipes", async () => {
+    /** Recruitment emails are only sent on "interested" swipes, not archives.
+     *  Per spec: trigger is "A user swipes interested on a proposal involving
+     *  a seeded-but-unclaimed researcher." */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-recruit-archive",
+      direction: "archive",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+
+    await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "archive",
+        viewedDetail: false,
+      })
+    );
+
+    expect(mockSendRecruitmentEmail).not.toHaveBeenCalled();
   });
 });

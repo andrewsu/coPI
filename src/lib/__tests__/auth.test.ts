@@ -113,6 +113,7 @@ describe("signIn callback", () => {
         institution: "MIT",
         department: "Biology",
         orcid: "0000-0001-2345-6789",
+        claimedAt: expect.any(Date),
       },
     });
   });
@@ -133,17 +134,20 @@ describe("signIn callback", () => {
       data: expect.objectContaining({
         email: "0000-0001-0000-0001@orcid.placeholder",
         institution: "Unknown",
+        claimedAt: expect.any(Date),
       }),
     });
   });
 
   it("returns true for returning user without updates", async () => {
+    /** Returning user with claimedAt set and no field changes — no update needed. */
     (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: "db-uuid-3",
       orcid: "0000-0001-0000-0002",
       name: "Existing Name",
       institution: "Harvard",
       department: "CS",
+      claimedAt: new Date("2024-01-01"),
     });
 
     const result = await callSignIn(
@@ -158,12 +162,14 @@ describe("signIn callback", () => {
   });
 
   it("updates name for returning user when changed on ORCID", async () => {
+    /** Returning user who already claimed — only name should be updated. */
     (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: "db-uuid-4",
       orcid: "0000-0001-0000-0003",
       name: "Old Name",
       institution: "Stanford",
       department: "Physics",
+      claimedAt: new Date("2024-01-01"),
     });
 
     await callSignIn(
@@ -179,12 +185,15 @@ describe("signIn callback", () => {
   });
 
   it("updates placeholder institution on seeded profile claim", async () => {
+    /** Seeded profile (claimedAt=null) being claimed via ORCID login.
+     *  Should update institution, department, AND set claimedAt. */
     (mockPrisma.user.findUnique as jest.Mock).mockResolvedValue({
       id: "seeded-uuid",
       orcid: "0000-0001-0000-0004",
       name: "Seeded User",
       institution: "Unknown",
       department: null,
+      claimedAt: null,
     });
 
     await callSignIn(
@@ -195,7 +204,11 @@ describe("signIn callback", () => {
 
     expect(mockPrisma.user.update).toHaveBeenCalledWith({
       where: { id: "seeded-uuid" },
-      data: { institution: "UCSD", department: "Medicine" },
+      data: {
+        institution: "UCSD",
+        department: "Medicine",
+        claimedAt: expect.any(Date),
+      },
     });
   });
 

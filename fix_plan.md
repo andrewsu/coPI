@@ -87,7 +87,7 @@
 - [x] Implement match notification email (immediate)
 - [x] Implement new proposals digest email (weekly batch)
 - [x] Implement profile refresh notification email
-- [ ] Implement unclaimed profile recruitment email (with rate limiting)
+- [x] Implement unclaimed profile recruitment email (with rate limiting)
 - [ ] Implement user-facing invite template for unclaimed profiles
 - [x] Build notification preferences in settings
 - [x] Implement unsubscribe link handling

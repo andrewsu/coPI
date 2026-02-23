@@ -132,7 +132,7 @@ export const authOptions: NextAuthOptions = {
         if (existingUser) {
           // Returning user or claiming a seeded profile.
           // Update name from ORCID in case it changed.
-          const updates: Record<string, string> = {};
+          const updates: Record<string, unknown> = {};
           if (user.name && user.name !== existingUser.name) {
             updates.name = user.name;
           }
@@ -145,6 +145,10 @@ export const authOptions: NextAuthOptions = {
           }
           if (orcidProfile?.department && !existingUser.department) {
             updates.department = orcidProfile.department;
+          }
+          // Mark seeded profiles as claimed on first login
+          if (!existingUser.claimedAt) {
+            updates.claimedAt = new Date();
           }
 
           if (Object.keys(updates).length > 0) {
@@ -162,6 +166,7 @@ export const authOptions: NextAuthOptions = {
               institution: orcidProfile?.institution ?? "Unknown",
               department: orcidProfile?.department ?? null,
               orcid,
+              claimedAt: new Date(),
             },
           });
 

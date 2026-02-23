@@ -19,6 +19,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserSide } from "@/lib/utils";
 import { sendMatchNotificationEmails } from "@/services/match-notifications";
+import { sendRecruitmentEmailIfUnclaimed } from "@/services/recruitment-email";
 
 export async function POST(
   _request: Request,
@@ -116,6 +117,17 @@ export async function POST(
       data: { [otherVisibilityField]: "visible" },
     });
   }
+
+  // Send recruitment email to the other user if they are unclaimed (seeded).
+  // Fire-and-forget: failures are logged but never block the unarchive response.
+  sendRecruitmentEmailIfUnclaimed(prisma, otherUserId, proposalId).catch(
+    (err) => {
+      console.error(
+        `[Unarchive] Failed to send recruitment email for user ${otherUserId}:`,
+        err instanceof Error ? err.message : err,
+      );
+    },
+  );
 
   return NextResponse.json({
     swipe: {

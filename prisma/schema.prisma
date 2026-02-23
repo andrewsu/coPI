@@ -66,8 +66,11 @@ model User {
   notifyNewProposals        Boolean @default(true) @map("notify_new_proposals")
   notifyProfileRefresh      Boolean @default(true) @map("notify_profile_refresh")
 
-  lastDigestSentAt DateTime? @map("last_digest_sent_at")
-  deletedAt        DateTime? @map("deleted_at")
+  lastDigestSentAt             DateTime? @map("last_digest_sent_at")
+  deletedAt                    DateTime? @map("deleted_at")
+  claimedAt                    DateTime? @map("claimed_at")
+  lastRecruitmentEmailSentAt   DateTime? @map("last_recruitment_email_sent_at")
+  recruitmentEmailCount        Int       @default(0) @map("recruitment_email_count")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
