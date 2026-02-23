@@ -162,8 +162,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    # Reload nginx every 6 hours to pick up renewed certificates
-    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+    # Reload nginx every 6 hours to pick up renewed certificates.
+    # NOTE: We must run the envsubst template script explicitly because
+    # the entrypoint only processes templates when $1 is "nginx".
+    # The reload loop is backgrounded AFTER envsubst completes to avoid
+    # a race where nginx starts before the config template is rendered.
+    command: "/bin/sh -c '/docker-entrypoint.d/20-envsubst-on-templates.sh && (while :; do sleep 6h & wait $${!}; nginx -s reload; done &) && nginx -g \"daemon off;\"'"
 
   # -----------------------------------------------------------
   # Certbot — Let's Encrypt certificate renewal
