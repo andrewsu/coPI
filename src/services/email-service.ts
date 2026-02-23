@@ -291,7 +291,7 @@ export function renderProfileRefreshCandidate(
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
       <tr>
         <td style="background-color:#1e40af;border-radius:6px;">
-          <a href="${escapeHtml(getAppUrl())}/profile/edit" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">
+          <a href="${escapeHtml(getAppUrl())}/profile/compare" style="display:inline-block;padding:12px 24px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;">
             Review Updated Profile
           </a>
         </td>

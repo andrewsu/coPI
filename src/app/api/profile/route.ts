@@ -108,6 +108,7 @@ export async function GET() {
     userSubmittedTexts,
     profileVersion: profile.profileVersion,
     profileGeneratedAt: profile.profileGeneratedAt,
+    hasPendingProfile: profile.pendingProfile != null,
   });
 }
 

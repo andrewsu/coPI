@@ -43,6 +43,7 @@ interface ProfileData {
   userSubmittedTexts: SubmittedTextEntry[];
   profileVersion: number;
   profileGeneratedAt: string;
+  hasPendingProfile?: boolean;
 }
 
 interface RefreshStatusResponse {
@@ -355,6 +356,30 @@ export default function ProfileEditPage() {
             </button>
           </div>
         </div>
+
+        {/* Pending profile update banner */}
+        {profile.hasPendingProfile && (
+          <div className="mb-6 rounded-md bg-amber-50 border border-amber-200 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-amber-800">
+                  Profile update available
+                </p>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  New publications were found. Review the updated profile to
+                  accept or dismiss changes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.push("/profile/compare")}
+                className="ml-4 inline-flex items-center rounded-md bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700"
+              >
+                Review Update
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Refresh progress indicator */}
         {refreshing && refreshMessage && (

@@ -234,9 +234,11 @@ describe("renderProfileRefreshCandidate", () => {
     expect(result.html).not.toContain("more...");
   });
 
-  it("includes link to profile edit page", () => {
+  it("includes link to profile comparison page", () => {
+    /** Email links to the side-by-side comparison page where users
+     * can review, accept, or dismiss the candidate profile update. */
     const result = renderProfileRefreshCandidate(refreshData);
-    expect(result.html).toContain("/profile/edit");
+    expect(result.html).toContain("/profile/compare");
     expect(result.html).toContain("Review Updated Profile");
   });
 });

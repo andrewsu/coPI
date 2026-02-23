@@ -36,7 +36,7 @@
 - [x] Build user-submitted text management UI (add/edit/delete, max 5)
 - [x] Implement profile refresh (manual trigger)
 - [x] Implement monthly refresh cron job (detect new publications, generate candidate, notify)
-- [ ] Build side-by-side profile comparison UI for refresh candidates
+- [x] Build side-by-side profile comparison UI for refresh candidates
 
 ## Phase 4: Match Pool
 
