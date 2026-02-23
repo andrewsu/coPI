@@ -86,16 +86,16 @@
 - [x] Set up AWS SES email sending
 - [x] Implement match notification email (immediate)
 - [x] Implement new proposals digest email (weekly batch)
-- [ ] Implement profile refresh notification email
+- [x] Implement profile refresh notification email
 - [ ] Implement unclaimed profile recruitment email (with rate limiting)
 - [ ] Implement user-facing invite template for unclaimed profiles
-- [ ] Build notification preferences in settings
+- [x] Build notification preferences in settings
 - [ ] Implement unsubscribe link handling
 
 ## Phase 8: Admin and Settings
 
 - [x] Build settings page (email visibility, incoming proposals toggle, notification prefs)
-- [ ] Implement account deletion (with proposal preservation logic)
+- [x] Implement account deletion (with proposal preservation logic)
 - [ ] Build admin CLI or panel for seeding profiles by ORCID ID list
 - [ ] Implement seeded profile pipeline (create user + run pipeline without OAuth)
 

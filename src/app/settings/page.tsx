@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 
 interface SettingsData {
@@ -64,6 +64,12 @@ export default function SettingsPage() {
 
   // Confirmation modal state for disabling match notifications
   const [showMatchConfirm, setShowMatchConfirm] = useState(false);
+
+  // Account deletion state
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmChecked, setDeleteConfirmChecked] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Fetch settings on mount
   useEffect(() => {
@@ -176,6 +182,33 @@ export default function SettingsPage() {
       );
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  /** Handle account deletion via DELETE /api/account. */
+  const handleDeleteAccount = useCallback(async () => {
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const res = await fetch("/api/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json()) as { error: string };
+        throw new Error(data.error || "Failed to delete account");
+      }
+
+      // Sign out and redirect to login
+      await signOut({ callbackUrl: "/login" });
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete account",
+      );
+      setDeleting(false);
     }
   }, []);
 
@@ -559,6 +592,48 @@ export default function SettingsPage() {
               </Link>
             </div>
           </section>
+
+          {/* Delete Account — danger zone */}
+          <section className="rounded-lg border border-red-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-red-900">
+              Delete Account
+            </h2>
+            <div className="mt-2 text-sm text-gray-600 space-y-2">
+              <p>
+                Permanently delete your account. This action cannot be undone.
+              </p>
+              <p className="font-medium text-gray-700">What will be deleted:</p>
+              <ul className="list-disc pl-5 text-gray-600 space-y-1">
+                <li>Your research profile and synthesized data</li>
+                <li>All publications and submitted texts</li>
+                <li>Swipe history and survey responses</li>
+                <li>Match pool entries and affiliation selections</li>
+              </ul>
+              <p className="font-medium text-gray-700">What will be preserved:</p>
+              <ul className="list-disc pl-5 text-gray-600 space-y-1">
+                <li>
+                  Collaboration proposals where the other researcher expressed
+                  interest (your name and institution are retained, but your
+                  profile and contact info are removed)
+                </li>
+              </ul>
+              <p className="text-xs text-gray-500 mt-2">
+                If you need a full scrub of all preserved data, you can email us
+                after deletion.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setShowDeleteConfirm(true);
+                setDeleteConfirmChecked(false);
+                setDeleteError(null);
+              }}
+              className="mt-4 rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+            >
+              Delete my account
+            </button>
+          </section>
         </div>
 
         {/* Action buttons */}
@@ -606,6 +681,64 @@ export default function SettingsPage() {
                 className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
               >
                 Turn Off
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Account deletion confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 max-w-md rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-red-900">
+              Delete your account?
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              This will permanently delete your profile, publications, swipe
+              history, and all associated data. Proposals where the other
+              researcher expressed interest will be preserved with your name
+              and institution only.
+            </p>
+            <p className="mt-2 text-sm text-gray-600">
+              This action cannot be undone.
+            </p>
+
+            {deleteError && (
+              <div className="mt-3 rounded-md bg-red-50 p-3">
+                <p className="text-sm text-red-700">{deleteError}</p>
+              </div>
+            )}
+
+            <label className="mt-4 flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={deleteConfirmChecked}
+                onChange={(e) => setDeleteConfirmChecked(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+              />
+              <span className="text-sm text-gray-700">
+                I understand that this action is permanent and my data will be
+                deleted
+              </span>
+            </label>
+
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={!deleteConfirmChecked || deleting}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleting ? "Deleting..." : "Delete Account"}
               </button>
             </div>
           </div>
