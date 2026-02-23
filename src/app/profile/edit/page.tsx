@@ -536,7 +536,6 @@ export default function ProfileEditPage() {
             label="Key Targets"
             items={profile.keyTargets}
             onChange={(v) => updateField("keyTargets", v)}
-            minItems={1}
             helpText="Proteins, pathways, or molecular systems"
           />
 

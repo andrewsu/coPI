@@ -74,8 +74,8 @@ function validateProfileFields(
     errors.push("At least 1 disease area or biological process is required.");
   }
 
-  if (!Array.isArray(data.keyTargets) || data.keyTargets.length < 1) {
-    errors.push("At least 1 key target is required.");
+  if (!Array.isArray(data.keyTargets)) {
+    errors.push("Key targets must be an array.");
   }
 
   if (!Array.isArray(data.experimentalModels)) {
