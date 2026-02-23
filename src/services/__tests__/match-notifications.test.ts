@@ -10,6 +10,9 @@
  * Spec reference: specs/notifications.md "Match Notification" section.
  */
 
+// Required by buildUnsubscribeUrl which is now called when enqueuing emails
+process.env.NEXTAUTH_SECRET = "test-secret-for-match-notifications";
+
 jest.mock("@/lib/job-queue", () => ({
   getJobQueue: jest.fn(),
 }));

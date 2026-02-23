@@ -7,6 +7,9 @@
  * either spam users or silently skip important updates.
  */
 
+// Required by buildUnsubscribeUrl which is now called when enqueuing refresh emails
+process.env.NEXTAUTH_SECRET = "test-secret-for-monthly-refresh";
+
 import type { PrismaClient } from "@prisma/client";
 import type Anthropic from "@anthropic-ai/sdk";
 

@@ -14,6 +14,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "crypto";
 
 import { getJobQueue } from "@/lib/job-queue";
+import { buildUnsubscribeUrl } from "@/lib/unsubscribe-token";
 import { fetchOrcidGrantTitles, fetchOrcidWorks, type OrcidWork } from "@/lib/orcid";
 import {
   fetchPubMedAbstracts,
@@ -350,9 +351,10 @@ export async function runMonthlyRefresh(
       templateId: "profile_refresh_candidate",
       to: user.email,
       data: {
-        userId,
+        recipientName: user.name,
         newPublicationTitles: newWorks.map((work) => work.title),
         changedFields,
+        unsubscribeUrl: buildUnsubscribeUrl(userId, "profile_refresh"),
       },
     });
     notified = true;

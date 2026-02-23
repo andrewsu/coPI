@@ -11,6 +11,9 @@
  * Spec reference: specs/notifications.md "New Proposals Available" section.
  */
 
+// Required by buildUnsubscribeUrl which is now called when enqueuing digest emails
+process.env.NEXTAUTH_SECRET = "test-secret-for-proposals-digest";
+
 jest.mock("@/lib/job-queue", () => ({
   getJobQueue: jest.fn(),
 }));

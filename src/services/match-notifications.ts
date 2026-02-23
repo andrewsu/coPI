@@ -15,6 +15,7 @@
 
 import type { PrismaClient } from "@prisma/client";
 import { getJobQueue } from "@/lib/job-queue";
+import { buildUnsubscribeUrl } from "@/lib/unsubscribe-token";
 import type { MatchNotificationData } from "@/services/email-service";
 
 /** Fields needed from each user to build the notification email. */
@@ -162,6 +163,7 @@ async function enqueueMatchEmail(
     ...(shouldShareEmail ? { contactEmail: matchedUser.email } : {}),
     emailVisibility: matchedUser.emailVisibility,
     proposalId,
+    unsubscribeUrl: buildUnsubscribeUrl(recipient.id, "matches"),
   };
 
   await queue.enqueue({

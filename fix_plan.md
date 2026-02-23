@@ -90,7 +90,7 @@
 - [ ] Implement unclaimed profile recruitment email (with rate limiting)
 - [ ] Implement user-facing invite template for unclaimed profiles
 - [x] Build notification preferences in settings
-- [ ] Implement unsubscribe link handling
+- [x] Implement unsubscribe link handling
 
 ## Phase 8: Admin and Settings
 

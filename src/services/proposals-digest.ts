@@ -20,6 +20,7 @@
 import type { PrismaClient, CollaborationProposal } from "@prisma/client";
 import { getJobQueue } from "@/lib/job-queue";
 import { getUserSide } from "@/lib/utils";
+import { buildUnsubscribeUrl } from "@/lib/unsubscribe-token";
 import type { NewProposalsDigestData } from "@/services/email-service";
 
 /** Result of running the weekly digest for all users. */
@@ -188,6 +189,7 @@ async function sendDigestForUser(
     proposalCount: newProposals.length,
     topProposalTitle: topProposal.title,
     topProposalSummary: oneLineSummary,
+    unsubscribeUrl: buildUnsubscribeUrl(user.id, "new_proposals"),
   };
 
   const queue = getJobQueue();

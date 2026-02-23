@@ -48,6 +48,7 @@ export interface MatchNotificationData {
   contactEmail?: string;
   emailVisibility: "public_profile" | "mutual_matches" | "never";
   proposalId: string;
+  unsubscribeUrl?: string;
 }
 
 export interface NewProposalsDigestData {
@@ -55,18 +56,21 @@ export interface NewProposalsDigestData {
   proposalCount: number;
   topProposalTitle: string;
   topProposalSummary: string;
+  unsubscribeUrl?: string;
 }
 
 export interface ProfileRefreshCandidateData {
   recipientName: string;
   newPublicationTitles: string[];
   changedFields: string[];
+  unsubscribeUrl?: string;
 }
 
 export interface UnclaimedProfileRecruitmentData {
   recipientName: string;
   topicArea: string;
   claimUrl: string;
+  unsubscribeUrl?: string;
 }
 
 export type TemplateData =
@@ -92,7 +96,11 @@ function getAppUrl(): string {
 
 // --- Email layout ---
 
-function wrapInLayout(bodyContent: string, preheader: string): string {
+function wrapInLayout(bodyContent: string, preheader: string, unsubscribeUrl?: string): string {
+  const unsubscribeLine = unsubscribeUrl
+    ? `\n                &nbsp;&middot;&nbsp;\n                <a href="${escapeHtml(unsubscribeUrl)}" style="color:#1e40af;text-decoration:none;">Unsubscribe</a>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -128,7 +136,7 @@ function wrapInLayout(bodyContent: string, preheader: string): string {
               <p style="margin:0;font-size:12px;color:#6b7280;line-height:1.5;">
                 You received this email because you have an account on <a href="${escapeHtml(getAppUrl())}" style="color:#1e40af;text-decoration:none;">CoPI</a>.
                 <br/>
-                <a href="${escapeHtml(getAppUrl())}/settings" style="color:#1e40af;text-decoration:none;">Manage notification preferences</a>
+                <a href="${escapeHtml(getAppUrl())}/settings" style="color:#1e40af;text-decoration:none;">Manage notification preferences</a>${unsubscribeLine}
               </p>
             </td>
           </tr>
@@ -193,6 +201,7 @@ export function renderMatchNotification(
     html: wrapInLayout(
       body,
       `You and Dr. ${data.matchedResearcherName} both expressed interest in collaborating.`,
+      data.unsubscribeUrl,
     ),
   };
 }
@@ -233,6 +242,7 @@ export function renderNewProposalsDigest(
     html: wrapInLayout(
       body,
       `${data.proposalCount} new collaboration suggestions are waiting for you.`,
+      data.unsubscribeUrl,
     ),
   };
 }
@@ -303,6 +313,7 @@ export function renderProfileRefreshCandidate(
     html: wrapInLayout(
       body,
       "New publications found. Review your updated research profile.",
+      data.unsubscribeUrl,
     ),
   };
 }
@@ -343,6 +354,7 @@ export function renderUnclaimedProfileRecruitment(
     html: wrapInLayout(
       body,
       "A researcher has expressed interest in collaborating with you.",
+      data.unsubscribeUrl,
     ),
   };
 }
