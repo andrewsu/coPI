@@ -84,7 +84,7 @@
 ## Phase 7: Notifications
 
 - [x] Set up AWS SES email sending
-- [ ] Implement match notification email (immediate)
+- [x] Implement match notification email (immediate)
 - [ ] Implement new proposals digest email (weekly batch)
 - [ ] Implement profile refresh notification email
 - [ ] Implement unclaimed profile recruitment email (with rate limiting)

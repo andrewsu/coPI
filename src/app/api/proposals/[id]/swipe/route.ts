@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserSide } from "@/lib/utils";
+import { sendMatchNotificationEmails } from "@/services/match-notifications";
 
 /** Show the periodic survey after every Nth archive action per spec. */
 export const SURVEY_INTERVAL = 5;
@@ -142,6 +143,17 @@ export async function POST(
       });
       matched = true;
       matchId = match.id;
+
+      // Send match notification emails to both users (fire-and-forget).
+      // Notification failures are logged but never block the swipe response.
+      sendMatchNotificationEmails(prisma, match.id, proposalId).catch(
+        (err) => {
+          console.error(
+            `[Swipe] Failed to send match notifications for match ${match.id}:`,
+            err instanceof Error ? err.message : err,
+          );
+        },
+      );
     }
 
     // Flip other user's visibility from pending_other_interest → visible

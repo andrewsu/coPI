@@ -31,9 +31,13 @@ jest.mock("@/lib/prisma", () => ({
     },
   },
 }));
+jest.mock("@/services/match-notifications", () => ({
+  sendMatchNotificationEmails: jest.fn().mockResolvedValue(undefined),
+}));
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
+import { sendMatchNotificationEmails } from "@/services/match-notifications";
 
 const mockGetServerSession = jest.mocked(getServerSession);
 const mockFindUnique = jest.mocked(prisma.collaborationProposal.findUnique);
@@ -41,6 +45,7 @@ const mockProposalUpdate = jest.mocked(prisma.collaborationProposal.update);
 const mockSwipeCreate = jest.mocked(prisma.swipe.create);
 const mockSwipeCount = jest.mocked(prisma.swipe.count);
 const mockMatchCreate = jest.mocked(prisma.match.create);
+const mockSendMatchNotifications = jest.mocked(sendMatchNotificationEmails);
 
 const { POST } = require("../route");
 
@@ -650,5 +655,85 @@ describe("POST /api/proposals/[id]/swipe", () => {
     // showSurvey should be false (default) — count is not called for interested
     expect(data.showSurvey).toBe(false);
     expect(mockSwipeCount).not.toHaveBeenCalled();
+  });
+
+  // --- Match Notification Emails ---
+
+  it("triggers match notification emails when a match is created", async () => {
+    /** When both users swipe interested, sendMatchNotificationEmails should
+     *  be called with the prisma client, match ID, and proposal ID. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(
+      makeProposal({
+        swipes: [{ userId: "user-zzz", direction: "interested" }],
+      }) as never
+    );
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-notif",
+      direction: "interested",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    mockMatchCreate.mockResolvedValue({
+      id: "match-notif",
+      proposalId: "proposal-1",
+    } as never);
+
+    await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: false,
+      })
+    );
+
+    expect(mockSendMatchNotifications).toHaveBeenCalledWith(
+      prisma,
+      "match-notif",
+      "proposal-1"
+    );
+  });
+
+  it("does not trigger match notifications when no match is created", async () => {
+    /** When only one user has swiped, no match is created and no notification
+     *  should be triggered. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-no-match",
+      direction: "interested",
+      viewedDetail: true,
+      timeSpentMs: 1000,
+    } as never);
+
+    await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: true,
+        timeSpentMs: 1000,
+      })
+    );
+
+    expect(mockSendMatchNotifications).not.toHaveBeenCalled();
+  });
+
+  it("does not trigger match notifications for archive swipes", async () => {
+    /** Archive swipes never create matches, so notifications should not fire. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-archive-notif",
+      direction: "archive",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+
+    await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "archive",
+        viewedDetail: false,
+      })
+    );
+
+    expect(mockSendMatchNotifications).not.toHaveBeenCalled();
   });
 });

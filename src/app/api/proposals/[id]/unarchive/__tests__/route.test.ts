@@ -30,15 +30,20 @@ jest.mock("@/lib/prisma", () => ({
     },
   },
 }));
+jest.mock("@/services/match-notifications", () => ({
+  sendMatchNotificationEmails: jest.fn().mockResolvedValue(undefined),
+}));
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
+import { sendMatchNotificationEmails } from "@/services/match-notifications";
 
 const mockGetServerSession = jest.mocked(getServerSession);
 const mockFindUnique = jest.mocked(prisma.collaborationProposal.findUnique);
 const mockProposalUpdate = jest.mocked(prisma.collaborationProposal.update);
 const mockSwipeUpdate = jest.mocked(prisma.swipe.update);
 const mockMatchCreate = jest.mocked(prisma.match.create);
+const mockSendMatchNotifications = jest.mocked(sendMatchNotificationEmails);
 
 const { POST } = require("../route");
 
@@ -340,5 +345,56 @@ describe("POST /api/proposals/[id]/unarchive", () => {
       where: { id: "proposal-1" },
       data: { visibilityB: "visible" },
     });
+  });
+
+  // --- Match Notification Emails ---
+
+  it("triggers match notification emails when unarchive creates a match", async () => {
+    /** When unarchiving causes a mutual match, sendMatchNotificationEmails
+     *  should be called so both users are notified immediately. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(
+      makeProposal({
+        swipes: [
+          { id: "swipe-1", userId: "user-aaa", direction: "archive" },
+          { id: "swipe-2", userId: "user-zzz", direction: "interested" },
+        ],
+      }) as never
+    );
+    mockSwipeUpdate.mockResolvedValue({
+      id: "swipe-1",
+      direction: "interested",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    mockMatchCreate.mockResolvedValue({
+      id: "match-notif",
+      proposalId: "proposal-1",
+    } as never);
+
+    await POST(...makeRouteArgs("proposal-1"));
+
+    expect(mockSendMatchNotifications).toHaveBeenCalledWith(
+      prisma,
+      "match-notif",
+      "proposal-1"
+    );
+  });
+
+  it("does not trigger match notifications when unarchive does not create a match", async () => {
+    /** When unarchiving without the other user having swiped interested,
+     *  no match is created and no notifications should fire. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeUpdate.mockResolvedValue({
+      id: "swipe-1",
+      direction: "interested",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+
+    await POST(...makeRouteArgs("proposal-1"));
+
+    expect(mockSendMatchNotifications).not.toHaveBeenCalled();
   });
 });
