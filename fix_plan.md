@@ -114,7 +114,7 @@
 ## Phase 10: Admin Dashboard
 
 - [x] Add `isAdmin` boolean field to User model, run migration
-- [ ] Implement admin route protection middleware (check `isAdmin` on session)
+- [x] Implement admin route protection middleware (check `isAdmin` on session)
 - [ ] Build 403 page for non-admin users
 - [ ] Add admin link to nav/header (visible only to admin users)
 - [ ] Build Users Overview page (`/admin/users`) — sortable/filterable table
