@@ -36,7 +36,7 @@ function OrcidProvider(): OAuthConfig<OrcidProfile> {
     clientSecret: process.env.ORCID_CLIENT_SECRET!,
     authorization: {
       url: `${orcidBaseUrl}/oauth/authorize`,
-      params: { scope: "/read-limited" },
+      params: { scope: "/authenticate" },
     },
     token: {
       url: `${orcidBaseUrl}/oauth/token`,
@@ -83,8 +83,11 @@ function OrcidProvider(): OAuthConfig<OrcidProfile> {
     userinfo: {
       async request({ tokens }) {
         const orcid = (tokens as Record<string, unknown>).orcid as string;
-        const accessToken = tokens.access_token as string;
-        const profile = await fetchOrcidProfile(orcid, accessToken);
+        // Use public API (no access token) since we have Public API credentials.
+        // The member API (api.orcid.org) requires Member API credentials and
+        // /read-limited scope; the public API (pub.orcid.org) provides all
+        // publicly-visible profile data without authentication.
+        const profile = await fetchOrcidProfile(orcid);
         // next-auth Profile expects email as string | undefined, not null
         return {
           ...profile,
