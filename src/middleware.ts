@@ -38,25 +38,9 @@ export async function middleware(request: NextRequest) {
     if (pathname.startsWith("/api/admin")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    // For admin page routes, return an inline 403 page.
-    // A proper /forbidden page will be built as a separate task.
-    return new NextResponse(
-      `<!DOCTYPE html>
-<html>
-<head><title>403 Forbidden</title></head>
-<body style="font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f9fafb;">
-  <div style="text-align: center;">
-    <h1 style="font-size: 3rem; color: #6b7280; margin-bottom: 0.5rem;">403</h1>
-    <p style="color: #374151; margin-bottom: 1.5rem;">You do not have admin access.</p>
-    <a href="/" style="color: #2563eb; text-decoration: underline;">Go Home</a>
-  </div>
-</body>
-</html>`,
-      {
-        status: 403,
-        headers: { "Content-Type": "text/html" },
-      },
-    );
+    // Redirect to the dedicated /forbidden page.
+    const forbiddenUrl = new URL("/forbidden", request.url);
+    return NextResponse.redirect(forbiddenUrl);
   }
 
   return NextResponse.next();

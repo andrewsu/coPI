@@ -105,10 +105,10 @@ describe("middleware", () => {
   });
 
   describe("admin page route protection", () => {
-    // Non-admin users navigating to /admin/* pages should see a 403 Forbidden
-    // response. The spec requires: "Non-admin users who navigate to /admin see
-    // a 403 page."
-    it("returns 403 HTML for non-admin users on /admin", async () => {
+    // Non-admin users navigating to /admin/* pages are redirected to /forbidden.
+    // The spec requires: "Non-admin users who navigate to /admin see a 403 page."
+    // The /forbidden page renders the styled 403 content.
+    it("redirects non-admin users to /forbidden on /admin", async () => {
       mockGetToken.mockResolvedValue({
         userId: "user-1",
         orcid: "0000-0001-2345-6789",
@@ -116,15 +116,14 @@ describe("middleware", () => {
       });
 
       const response = await middleware(createRequest("/admin"));
-      expect(response.status).toBe(403);
-      expect(response.headers.get("content-type")).toBe("text/html");
-      const body = await response.text();
-      expect(body).toContain("403");
-      expect(body).toContain("admin access");
+      expect(response.status).toBe(307);
+      const location = response.headers.get("location")!;
+      const url = new URL(location);
+      expect(url.pathname).toBe("/forbidden");
     });
 
-    // Nested admin page routes should also be protected.
-    it("returns 403 for non-admin users on /admin/users", async () => {
+    // Nested admin page routes should also redirect to /forbidden.
+    it("redirects non-admin users to /forbidden on /admin/users", async () => {
       mockGetToken.mockResolvedValue({
         userId: "user-1",
         orcid: "0000-0001-2345-6789",
@@ -132,10 +131,13 @@ describe("middleware", () => {
       });
 
       const response = await middleware(createRequest("/admin/users"));
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(307);
+      const location = response.headers.get("location")!;
+      const url = new URL(location);
+      expect(url.pathname).toBe("/forbidden");
     });
 
-    it("returns 403 for non-admin users on /admin/users/some-id", async () => {
+    it("redirects non-admin users to /forbidden on /admin/users/some-id", async () => {
       mockGetToken.mockResolvedValue({
         userId: "user-1",
         orcid: "0000-0001-2345-6789",
@@ -143,10 +145,13 @@ describe("middleware", () => {
       });
 
       const response = await middleware(createRequest("/admin/users/abc-123"));
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(307);
+      const location = response.headers.get("location")!;
+      const url = new URL(location);
+      expect(url.pathname).toBe("/forbidden");
     });
 
-    it("returns 403 for non-admin users on /admin/stats", async () => {
+    it("redirects non-admin users to /forbidden on /admin/stats", async () => {
       mockGetToken.mockResolvedValue({
         userId: "user-1",
         orcid: "0000-0001-2345-6789",
@@ -154,7 +159,10 @@ describe("middleware", () => {
       });
 
       const response = await middleware(createRequest("/admin/stats"));
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(307);
+      const location = response.headers.get("location")!;
+      const url = new URL(location);
+      expect(url.pathname).toBe("/forbidden");
     });
 
     // Admin users should pass through to admin page routes without interference.
@@ -275,7 +283,10 @@ describe("middleware", () => {
       });
 
       const response = await middleware(createRequest("/admin/users"));
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(307);
+      const location = response.headers.get("location")!;
+      const url = new URL(location);
+      expect(url.pathname).toBe("/forbidden");
     });
 
     // isAdmin explicitly false should be denied.
