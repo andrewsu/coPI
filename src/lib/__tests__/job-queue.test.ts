@@ -13,6 +13,7 @@ import {
   type QueuedJob,
   getJobQueue,
 } from "../job-queue";
+import { PostgresJobQueue } from "../postgres-job-queue";
 
 // Suppress console.error from retry/dead-letter logging during tests
 beforeEach(() => {
@@ -509,7 +510,6 @@ describe("getJobQueue", () => {
   });
 
   it("returns a PostgresJobQueue instance", () => {
-    const { PostgresJobQueue } = require("@/lib/postgres-job-queue");
     const q = getJobQueue();
     expect(q).toBeInstanceOf(PostgresJobQueue);
   });
