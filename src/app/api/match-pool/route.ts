@@ -12,9 +12,7 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-/** The maximum number of users evaluated per matching cycle. */
-export const MATCH_POOL_CAP = 200;
+import { MATCH_POOL_CAP } from "@/services/eligible-pairs";
 
 export async function GET() {
   const session = await getServerSession(authOptions);

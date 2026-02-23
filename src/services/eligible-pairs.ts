@@ -5,11 +5,21 @@
  * generated. Uses match pool entries and the allow_incoming_proposals setting
  * to decide eligibility and assign per-side visibility states.
  *
- * See specs/matching-engine.md "Eligible Pair Computation" for the full rules.
+ * Enforces the per-user match pool cap (default 200) with priority ordering:
+ * 1. Individually selected users (always included)
+ * 2. Affiliation/all-users selections (randomly sampled with weekly rotation)
+ *
+ * See specs/matching-engine.md "Eligible Pair Computation" and
+ * specs/auth-and-user-management.md "Match Pool Cap" for the full rules.
  */
 
-import type { PrismaClient, ProposalVisibility } from "@prisma/client";
+import type { PrismaClient, MatchPoolSource, ProposalVisibility } from "@prisma/client";
 import { orderUserIds } from "@/lib/utils";
+
+// --- Public constants ---
+
+/** Maximum number of users evaluated per matching cycle per user. */
+export const MATCH_POOL_CAP = 200;
 
 // --- Public types ---
 
@@ -29,6 +39,13 @@ export interface EligiblePair {
   profileVersionB: number;
 }
 
+/** A match pool entry with source information for cap prioritization. */
+export interface PoolEntry {
+  userId: string;
+  targetUserId: string;
+  source: MatchPoolSource;
+}
+
 /** Options for eligible pair computation. */
 export interface EligiblePairOptions {
   /**
@@ -36,6 +53,12 @@ export interface EligiblePairOptions {
    * Used when a specific user's match pool changes or profile updates.
    */
   forUserId?: string;
+  /** Disable match pool cap enforcement. Default: false. */
+  disableCap?: boolean;
+  /** Override the cap value. Default: MATCH_POOL_CAP (200). */
+  cap?: number;
+  /** Override the rotation seed for deterministic testing. */
+  cycleSeed?: string;
 }
 
 // --- Service ---
@@ -62,10 +85,11 @@ export async function computeEligiblePairs(
   prisma: PrismaClient,
   options: EligiblePairOptions = {},
 ): Promise<EligiblePair[]> {
-  const { forUserId } = options;
+  const { forUserId, disableCap = false, cap = MATCH_POOL_CAP, cycleSeed } = options;
 
-  // Step 1: Fetch all match pool entries (scoped if forUserId given).
+  // Step 1: Fetch all match pool entries with source (scoped if forUserId given).
   // Each entry represents a directed selection: userId selected targetUserId.
+  // Source is needed for cap priority ordering.
   const whereClause = forUserId
     ? {
         OR: [{ userId: forUserId }, { targetUserId: forUserId }],
@@ -77,6 +101,7 @@ export async function computeEligiblePairs(
     select: {
       userId: true,
       targetUserId: true,
+      source: true,
     },
   });
 
@@ -84,12 +109,19 @@ export async function computeEligiblePairs(
     return [];
   }
 
+  // Step 1.5: Apply per-user match pool cap.
+  // Filters each user's entries to at most `cap` targets, prioritizing
+  // individual_select entries over affiliation_select/all_users entries.
+  const cappedEntries = disableCap
+    ? entries
+    : capAllEntries(entries, cap, cycleSeed);
+
   // Step 2: Build a set of directed edges for O(1) lookup.
   // Key: "userId->targetUserId"
   const directedEdges = new Set<string>();
   const involvedUserIds = new Set<string>();
 
-  for (const entry of entries) {
+  for (const entry of cappedEntries) {
     directedEdges.add(`${entry.userId}->${entry.targetUserId}`);
     involvedUserIds.add(entry.userId);
     involvedUserIds.add(entry.targetUserId);
@@ -132,7 +164,7 @@ export async function computeEligiblePairs(
   // to avoid duplicates.
   const candidatePairs = new Map<string, EligiblePair>();
 
-  for (const entry of entries) {
+  for (const entry of cappedEntries) {
     const { userId, targetUserId } = entry;
 
     // Both users must have profiles
@@ -297,4 +329,147 @@ async function filterAlreadyEvaluated(
     const key = `${p.researcherAId}:${p.researcherBId}:${p.profileVersionA}:${p.profileVersionB}`;
     return !evaluatedSet.has(key);
   });
+}
+
+// --- Match pool cap ---
+
+/**
+ * Applies per-user match pool cap to all entries in the system.
+ *
+ * For each user who has match pool entries, caps their outgoing entries at
+ * `cap` targets using priority ordering:
+ *   1. individual_select entries — always included
+ *   2. affiliation_select / all_users entries — randomly sampled with
+ *      rotation to fill remaining slots up to the cap
+ *
+ * Entries from other users targeting a given user (incoming) are NOT subject
+ * to that user's cap — they are subject to the originating user's cap.
+ */
+function capAllEntries(
+  entries: PoolEntry[],
+  cap: number,
+  cycleSeed?: string,
+): PoolEntry[] {
+  // Group entries by their owner (userId)
+  const byUser = new Map<string, PoolEntry[]>();
+  for (const entry of entries) {
+    let list = byUser.get(entry.userId);
+    if (!list) {
+      list = [];
+      byUser.set(entry.userId, list);
+    }
+    list.push(entry);
+  }
+
+  const result: PoolEntry[] = [];
+  for (const [userId, userEntries] of byUser) {
+    const capped = capEntriesForUser(userEntries, cap, userId, cycleSeed);
+    result.push(...capped);
+  }
+  return result;
+}
+
+/**
+ * Caps a single user's match pool entries at `cap` targets.
+ *
+ * Priority per spec (auth-and-user-management.md):
+ *   1. individual_select entries — always included
+ *   2. affiliation_select / all_users entries — randomly sampled with
+ *      weekly rotation when over cap
+ *
+ * If individual_select entries alone exceed the cap, ALL individual entries
+ * are still included (the cap only limits bulk affiliation entries).
+ */
+export function capEntriesForUser(
+  entries: PoolEntry[],
+  cap: number = MATCH_POOL_CAP,
+  userId: string = "",
+  cycleSeed?: string,
+): PoolEntry[] {
+  const individual: PoolEntry[] = [];
+  const bulk: PoolEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.source === "individual_select") {
+      individual.push(entry);
+    } else {
+      bulk.push(entry);
+    }
+  }
+
+  // Individual selections always included
+  if (individual.length >= cap) {
+    // No room for bulk entries — return all individual entries
+    return individual;
+  }
+
+  const remainingSlots = cap - individual.length;
+  if (bulk.length <= remainingSlots) {
+    // Everything fits — no sampling needed
+    return entries;
+  }
+
+  // Sample from bulk entries to fill remaining slots
+  const seed = cycleSeed ?? getWeekSeed();
+  const sampled = seededSample(bulk, remainingSlots, `${userId}:${seed}`);
+  return [...individual, ...sampled];
+}
+
+/**
+ * Returns a weekly cycle seed string (YYYY-WNN) for rotation.
+ * Different weeks produce different seeds so tier-3 sampling rotates.
+ */
+export function getWeekSeed(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const jan1 = new Date(year, 0, 1);
+  const dayOfYear = Math.floor(
+    (now.getTime() - jan1.getTime()) / 86400000,
+  );
+  const week = Math.ceil((dayOfYear + jan1.getDay() + 1) / 7);
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
+/**
+ * Deterministic seeded sample using Fisher-Yates partial shuffle.
+ * Given the same seed, always returns the same subset.
+ * Used for weekly rotation of affiliation/all-users pool entries.
+ */
+export function seededSample<T>(
+  items: T[],
+  count: number,
+  seed: string,
+): T[] {
+  if (count >= items.length) return [...items];
+  if (count <= 0) return [];
+
+  const arr = [...items];
+  let hash = hashString(seed);
+
+  for (let i = 0; i < count; i++) {
+    hash = xorshift32(hash);
+    const j = i + (Math.abs(hash) % (arr.length - i));
+    const temp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = temp;
+  }
+
+  return arr.slice(0, count);
+}
+
+/** djb2 string hash. */
+function hashString(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+  }
+  return hash;
+}
+
+/** xorshift32 PRNG step. */
+function xorshift32(x: number): number {
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  return x;
 }

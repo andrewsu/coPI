@@ -46,7 +46,7 @@
 - [x] Implement individual user selection (add/remove from match pool)
 - [x] Implement affiliation selection (institution/department filter, dynamic expansion)
 - [x] Implement "all users" selection (dynamic expansion)
-- [ ] Implement match pool cap logic (200 cap, priority ordering)
+- [x] Implement match pool cap logic (200 cap, priority ordering)
 - [x] Store AffiliationSelection records
 - [ ] Auto-expand match pools when new users join (check affiliation selections and all-users flags)
 - [x] Build match pool view (show who's in it, how added, remove option)
