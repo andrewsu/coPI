@@ -216,7 +216,7 @@ export default async function AdminUserDetailPage({
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
               <span>Version {profile.profileVersion}</span>
               <span>
-                Generated: {formatDateTime(profile.profileGeneratedAt)}
+                Generated: {profile.profileGeneratedAt ? formatDateTime(profile.profileGeneratedAt) : "N/A"}
               </span>
               {profile.pendingProfile && (
                 <span className="text-amber-600">
