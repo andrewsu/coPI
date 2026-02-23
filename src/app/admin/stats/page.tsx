@@ -13,6 +13,8 @@
 import { prisma } from "@/lib/prisma";
 import { StatsDashboard } from "@/components/admin/stats-dashboard";
 
+export const dynamic = "force-dynamic";
+
 export interface StatsData {
   totalUsers: number;
   claimedUsers: number;

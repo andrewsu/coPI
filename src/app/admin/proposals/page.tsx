@@ -14,6 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { ProposalsTable } from "@/components/admin/proposals-table";
 import type { ConfidenceTier, ProposalVisibility } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 export type SwipeDirection = "interested" | "archive";
 
 export interface AdminProposal {

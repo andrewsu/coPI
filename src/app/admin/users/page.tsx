@@ -14,6 +14,8 @@ import { prisma } from "@/lib/prisma";
 import { getPipelineStatus } from "@/lib/pipeline-status";
 import { UsersTable } from "@/components/admin/users-table";
 
+export const dynamic = "force-dynamic";
+
 export type ProfileStatus = "no_profile" | "generating" | "complete" | "pending_update";
 
 export interface AdminUser {

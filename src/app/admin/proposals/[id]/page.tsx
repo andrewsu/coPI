@@ -12,6 +12,8 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 function formatDateTime(date: Date): string {
   return (
     date.toLocaleDateString("en-US", {

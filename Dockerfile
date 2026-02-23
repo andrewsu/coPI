@@ -25,6 +25,11 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
+# Dummy env vars so next build can pre-render pages that reference auth/db config.
+# Real values are injected at runtime via docker-compose env.
+ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
+ENV NEXTAUTH_URL="http://localhost:3000"
+ENV NEXTAUTH_SECRET="build-time-placeholder"
 RUN npm run build
 
 # ===========================================================
