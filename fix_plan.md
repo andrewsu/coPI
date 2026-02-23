@@ -122,7 +122,7 @@
 - [ ] Build Proposals Overview page (`/admin/proposals`) — sortable/filterable table
 - [ ] Build Proposal Detail page (`/admin/proposals/[id]`) — full read-only view
 - [ ] Build Matching Stats page (`/admin/stats`) — summary cards, matching results table, funnel
-- [ ] Implement admin API routes (`/api/admin/users`, `/api/admin/proposals`, `/api/admin/stats`)
+- [x] Implement admin API routes (`/api/admin/users`, `/api/admin/proposals`, `/api/admin/stats`)
 - [ ] Add CLI commands for granting/revoking admin (`npm run admin:grant`, `npm run admin:revoke`)
 
 ## Notes
@@ -149,3 +149,4 @@
 - ~~`proposals-digest.ts` `selectTopProposal()` had a similar `noUncheckedIndexedAccess` issue with `sort(...)[0]` returning `T | undefined`~~ — Fixed with non-null assertion (callers guarantee non-empty array).
 - ~~Tests for `keyTargets` validation (`profile-synthesis-prompt.test.ts`, `profile/route.test.ts`) still expected `keyTargets: []` to be rejected, but the validation code was already updated to make `keyTargets` optional (MIN_KEY_TARGETS=0). Tests also expected ≥4 simultaneous errors but got 3 since empty key_targets no longer generates an error.~~ — Fixed by updating tests to match the optional-keyTargets behavior.
 - ~~`docker-compose.prod.yml` was missing CloudWatch `awslogs` logging driver configuration on all 6 services, and the header lacked IAM permission documentation.~~ — Fixed by adding `logging:` blocks and IAM permissions note.
+- `scripts/__tests__/infra-config.test.ts` had 2 pre-existing CloudWatch logging test failures: (1) expected `awslogs-stream-prefix` but `docker-compose.prod.yml` uses `tag` instead (per recent fix commit), (2) expected `us-east-1` default region but compose uses `us-east-2` (per recent fix commit). Both tests updated to match current compose file.

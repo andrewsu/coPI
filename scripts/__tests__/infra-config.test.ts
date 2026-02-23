@@ -196,9 +196,9 @@ describe("docker-compose.prod.yml", () => {
       }
     });
 
-    it("sets awslogs-stream-prefix on all services for readable stream names", () => {
+    it("sets tag on all services for readable stream names", () => {
       for (const service of services) {
-        expect(compose).toContain(`awslogs-stream-prefix: ${service}`);
+        expect(compose).toContain(`tag: ${service}`);
       }
     });
 
@@ -209,9 +209,9 @@ describe("docker-compose.prod.yml", () => {
       expect(createGroupCount).toBe(services.length);
     });
 
-    it("uses AWS_REGION variable with us-east-1 default", () => {
-      // All services should reference ${AWS_REGION:-us-east-1}
-      const regionRefCount = (compose.match(/awslogs-region:\s*\$\{AWS_REGION:-us-east-1\}/g) || []).length;
+    it("uses AWS_REGION variable with us-east-2 default", () => {
+      // All services should reference ${AWS_REGION:-us-east-2}
+      const regionRefCount = (compose.match(/awslogs-region:\s*\$\{AWS_REGION:-us-east-2\}/g) || []).length;
       expect(regionRefCount).toBe(services.length);
     });
 
