@@ -102,13 +102,13 @@
 ## Phase 9: Deployment
 
 - [x] Create Dockerfile for the app
-- [ ] Create Docker Compose for production (app + worker + postgres)
+- [x] Create Docker Compose for production (app + worker + postgres)
+- [x] Create health check endpoint
 - [ ] Configure HTTPS (Let's Encrypt)
 - [ ] Set up DNS for copi.sulab.org
 - [ ] Deploy to EC2 instance
 - [ ] Configure environment variables
 - [ ] Set up CloudWatch logging
-- [ ] Create health check endpoint
 - [ ] Test full flow end-to-end on deployed instance
 
 ## Notes

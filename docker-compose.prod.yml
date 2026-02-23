@@ -1,0 +1,121 @@
+# -----------------------------------------------------------
+# Production Docker Compose for CoPI
+#
+# Runs the full stack on a single EC2 instance (pilot deployment):
+#   - postgres:  PostgreSQL 16 database
+#   - migrate:   One-shot Prisma migration runner
+#   - app:       Next.js web server (standalone build)
+#   - worker:    Background job processor
+#
+# Usage:
+#   # Build images
+#   docker compose -f docker-compose.prod.yml build
+#
+#   # Start all services
+#   docker compose -f docker-compose.prod.yml up -d
+#
+#   # View logs
+#   docker compose -f docker-compose.prod.yml logs -f app worker
+#
+#   # Stop
+#   docker compose -f docker-compose.prod.yml down
+#
+# Prerequisites:
+#   - Create .env with all required variables (see .env.example)
+#   - Set POSTGRES_PASSWORD to a strong random value
+#   - DATABASE_URL in .env is ignored; the compose file constructs
+#     it from POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB to use
+#     the internal Docker network hostname.
+# -----------------------------------------------------------
+
+services:
+  # -----------------------------------------------------------
+  # PostgreSQL database
+  # -----------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-copi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-copi}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-copi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # No port exposure — only reachable within the Docker network.
+    # Uncomment for direct DB access during debugging:
+    # ports:
+    #   - "5432:5432"
+
+  # -----------------------------------------------------------
+  # One-shot Prisma migration runner
+  # Uses the worker image (which has full node_modules + prisma).
+  # Runs once, applies any pending migrations, then exits.
+  # -----------------------------------------------------------
+  migrate:
+    build:
+      context: .
+      target: worker
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-copi}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # -----------------------------------------------------------
+  # Next.js web application (standalone build)
+  # -----------------------------------------------------------
+  app:
+    build:
+      context: .
+      target: app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      # Override DATABASE_URL to use Docker-internal hostname
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-copi}
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # -----------------------------------------------------------
+  # Background job processor (profile generation, matching, email)
+  # -----------------------------------------------------------
+  worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Override DATABASE_URL to use Docker-internal hostname
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copi}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-copi}
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
