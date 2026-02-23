@@ -8,3 +8,5 @@ ralph.log
 *.log
 coverage
 .claude
+certbot
+scripts

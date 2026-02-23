@@ -33,3 +33,6 @@ coverage/
 
 # Docker volumes (local data)
 pgdata/
+
+# Let's Encrypt certificates (generated on server)
+certbot/

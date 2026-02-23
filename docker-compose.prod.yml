@@ -6,6 +6,19 @@
 #   - migrate:   One-shot Prisma migration runner
 #   - app:       Next.js web server (standalone build)
 #   - worker:    Background job processor
+#   - nginx:     Reverse proxy with HTTPS termination
+#   - certbot:   Let's Encrypt certificate renewal
+#
+# First-time setup:
+#   1. Create .env with all required variables (see .env.example)
+#   2. Set POSTGRES_PASSWORD, DOMAIN, and CERTBOT_EMAIL
+#   3. Run: ./scripts/init-letsencrypt.sh
+#   4. Then: docker compose -f docker-compose.prod.yml up -d
+#
+# Certificate renewal:
+#   Certbot runs every 12 hours and renews certificates within
+#   30 days of expiry. Nginx reloads every 6 hours to pick up
+#   renewed certificates.
 #
 # Usage:
 #   # Build images
@@ -15,7 +28,7 @@
 #   docker compose -f docker-compose.prod.yml up -d
 #
 #   # View logs
-#   docker compose -f docker-compose.prod.yml logs -f app worker
+#   docker compose -f docker-compose.prod.yml logs -f app worker nginx
 #
 #   # Stop
 #   docker compose -f docker-compose.prod.yml down
@@ -23,6 +36,9 @@
 # Prerequisites:
 #   - Create .env with all required variables (see .env.example)
 #   - Set POSTGRES_PASSWORD to a strong random value
+#   - Set DOMAIN to your domain (e.g., copi.sulab.org)
+#   - Set CERTBOT_EMAIL to the certificate admin email
+#   - Run ./scripts/init-letsencrypt.sh for initial certificate
 #   - DATABASE_URL in .env is ignored; the compose file constructs
 #     it from POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB to use
 #     the internal Docker network hostname.
@@ -71,14 +87,15 @@ services:
 
   # -----------------------------------------------------------
   # Next.js web application (standalone build)
+  # No longer exposes ports directly — nginx proxies to it.
   # -----------------------------------------------------------
   app:
     build:
       context: .
       target: app
     restart: unless-stopped
-    ports:
-      - "${APP_PORT:-3000}:3000"
+    expose:
+      - "3000"
     env_file: .env
     environment:
       # Override DATABASE_URL to use Docker-internal hostname
@@ -116,6 +133,53 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+
+  # -----------------------------------------------------------
+  # Nginx reverse proxy — HTTPS termination
+  #
+  # Uses envsubst to template the DOMAIN variable into
+  # nginx.conf at container startup. Reloads every 6 hours
+  # to pick up renewed certificates from certbot.
+  # -----------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env (e.g. copi.sulab.org)}
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    # Reload nginx every 6 hours to pick up renewed certificates
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  # -----------------------------------------------------------
+  # Certbot — Let's Encrypt certificate renewal
+  #
+  # Attempts renewal every 12 hours. Certbot only renews when
+  # a certificate is within 30 days of expiry, so most runs
+  # are no-ops. Nginx reloads every 6 hours to pick up changes.
+  # -----------------------------------------------------------
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # Check for renewal every 12 hours (certbot best practice)
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h & wait $${!}; done'"
 
 volumes:
   pgdata:

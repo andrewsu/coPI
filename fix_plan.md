@@ -104,7 +104,7 @@
 - [x] Create Dockerfile for the app
 - [x] Create Docker Compose for production (app + worker + postgres)
 - [x] Create health check endpoint
-- [ ] Configure HTTPS (Let's Encrypt)
+- [x] Configure HTTPS (Let's Encrypt)
 - [ ] Set up DNS for copi.sulab.org
 - [ ] Deploy to EC2 instance
 - [ ] Configure environment variables
