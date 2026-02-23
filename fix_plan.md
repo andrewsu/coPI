@@ -35,7 +35,7 @@
 - [x] Build profile edit page (direct editing of all synthesized fields)
 - [x] Build user-submitted text management UI (add/edit/delete, max 5)
 - [x] Implement profile refresh (manual trigger)
-- [ ] Implement monthly refresh cron job (detect new publications, generate candidate, notify)
+- [x] Implement monthly refresh cron job (detect new publications, generate candidate, notify)
 - [ ] Build side-by-side profile comparison UI for refresh candidates
 
 ## Phase 4: Match Pool
@@ -48,7 +48,7 @@
 - [x] Implement "all users" selection (dynamic expansion)
 - [x] Implement match pool cap logic (200 cap, priority ordering)
 - [x] Store AffiliationSelection records
-- [ ] Auto-expand match pools when new users join (check affiliation selections and all-users flags)
+- [x] Auto-expand match pools when new users join (check affiliation selections and all-users flags)
 - [x] Build match pool view (show who's in it, how added, remove option)
 - [x] Enforce match pool setup as required step before showing main app
 
@@ -128,3 +128,4 @@
 - Retry prompt includes current error counts but message text may appear identical on repeated failures. Consider logging counts or adding retry attempt number to distinguish iterations.
 - User-submitted text management: the spec requires re-synthesis when texts are added/modified. This trigger should be implemented as part of the "Implement profile refresh (manual trigger)" task. Currently, saving texts only updates the JSONB field; the user must manually refresh their profile for changes to take effect in synthesis.
 - ~~Swipe queue page currently uses Previous/Next navigation buttons as temporary placeholders for browsing proposals.~~ Replaced by Interested/Archive swipe action buttons with match detection, visibility transitions, and analytics tracking (viewedDetail, timeSpentMs).
+- Monthly refresh currently runs per-user via `monthly_refresh` queue jobs. The recurring scheduler that enqueues these jobs for all users on a configurable cadence is still pending infrastructure wiring.

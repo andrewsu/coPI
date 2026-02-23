@@ -8,9 +8,11 @@
  *   - generate_profile: calls runProfilePipeline
  *   - run_matching: calls eligible pair computation + context assembly +
  *     proposal generation + storage
+ *   - expand_match_pool: adds new user to existing affiliation/all-users
+ *     selections, then triggers matching for new pairs
  *
  * Future handlers (services not yet built):
- *   - send_email, monthly_refresh, expand_match_pool
+ *   - send_email
  */
 
 import type { PrismaClient } from "@prisma/client";
@@ -19,6 +21,8 @@ import type {
   QueuedJob,
   GenerateProfileJob,
   RunMatchingJob,
+  ExpandMatchPoolJob,
+  MonthlyRefreshJob,
 } from "@/lib/job-queue";
 import { orderUserIds } from "@/lib/utils";
 import { computeEligiblePairs } from "@/services/eligible-pairs";
@@ -29,7 +33,10 @@ import {
   storeProposalsAndResult,
 } from "@/services/matching-engine";
 import { runProfilePipeline } from "@/services/profile-pipeline";
+import { expandMatchPoolsForNewUser } from "@/services/match-pool-expansion";
+import { triggerMatchingForNewPairs } from "@/services/matching-triggers";
 import { setPipelineStage } from "@/lib/pipeline-status";
+import { runMonthlyRefresh } from "@/services/monthly-refresh";
 
 // --- Public types ---
 
@@ -73,17 +80,11 @@ export function createJobProcessor(
         break;
 
       case "monthly_refresh":
-        console.log(
-          `[Worker] monthly_refresh job ${job.id}: handler not yet implemented. ` +
-            `User: ${payload.userId}`,
-        );
+        await handleMonthlyRefresh(payload, deps);
         break;
 
       case "expand_match_pool":
-        console.log(
-          `[Worker] expand_match_pool job ${job.id}: handler not yet implemented. ` +
-            `User: ${payload.userId}`,
-        );
+        await handleExpandMatchPool(payload, deps);
         break;
 
       default: {
@@ -228,4 +229,74 @@ async function handleRunMatching(
     );
     throw err;
   }
+}
+
+/**
+ * Adds a newly joined user to existing affiliation/all-users match pools.
+ *
+ * Flow:
+ * 1. Call expandMatchPoolsForNewUser to find matching AffiliationSelection
+ *    records and create MatchPoolEntry rows.
+ * 2. Trigger matching for each affected user's new pair with the new user.
+ *
+ * Returns silently (no error, no retry) when no matching selections exist.
+ * Re-throws errors from database operations to trigger queue retry.
+ */
+async function handleExpandMatchPool(
+  payload: ExpandMatchPoolJob,
+  deps: WorkerDependencies,
+): Promise<void> {
+  const { userId } = payload;
+
+  try {
+    const result = await expandMatchPoolsForNewUser(deps.prisma, userId);
+
+    if (result.entriesCreated === 0) {
+      console.log(
+        `[Worker] expand_match_pool for user ${userId}: ` +
+          `no matching selections found. No entries created.`,
+      );
+      return;
+    }
+
+    // Trigger matching for each affected user's new pair with the new user.
+    // Each affected user now has the new user in their pool.
+    for (const affectedUserId of result.affectedUserIds) {
+      triggerMatchingForNewPairs(affectedUserId, [userId]).catch((err) => {
+        console.error(
+          `[Worker] Failed to trigger matching for user ${affectedUserId} ` +
+            `after pool expansion: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+    }
+
+    console.log(
+      `[Worker] expand_match_pool for user ${userId}: ` +
+        `${result.entriesCreated} entries created, ` +
+        `matching triggered for ${result.affectedUserIds.length} users.`,
+    );
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[Worker] expand_match_pool for user ${userId} failed: ${errorMessage}`,
+    );
+    throw err;
+  }
+}
+
+/**
+ * Runs monthly refresh for one user.
+ *
+ * Re-throws errors so the queue can retry with exponential backoff.
+ */
+async function handleMonthlyRefresh(
+  payload: MonthlyRefreshJob,
+  deps: WorkerDependencies,
+): Promise<void> {
+  const result = await runMonthlyRefresh(deps.prisma, deps.anthropic, payload.userId);
+  console.log(
+    `[Worker] monthly_refresh for user ${payload.userId}: ` +
+      `${result.status}, newPublicationsStored=${result.newPublicationsStored}, ` +
+      `changedFields=${result.changedFields.length}, notified=${result.notified}`,
+  );
 }

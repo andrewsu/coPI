@@ -18,6 +18,9 @@ jest.mock("@/services/eligible-pairs");
 jest.mock("@/services/matching-context");
 jest.mock("@/services/matching-engine");
 jest.mock("@/services/profile-pipeline");
+jest.mock("@/services/monthly-refresh");
+jest.mock("@/services/match-pool-expansion");
+jest.mock("@/services/matching-triggers");
 jest.mock("@/lib/pipeline-status");
 
 import { computeEligiblePairs } from "@/services/eligible-pairs";
@@ -27,6 +30,9 @@ import {
   storeProposalsAndResult,
 } from "@/services/matching-engine";
 import { runProfilePipeline } from "@/services/profile-pipeline";
+import { runMonthlyRefresh } from "@/services/monthly-refresh";
+import { expandMatchPoolsForNewUser } from "@/services/match-pool-expansion";
+import { triggerMatchingForNewPairs } from "@/services/matching-triggers";
 import { setPipelineStage } from "@/lib/pipeline-status";
 
 const mockComputeEligiblePairs = computeEligiblePairs as jest.MockedFunction<
@@ -43,6 +49,17 @@ const mockStoreProposalsAndResult =
 const mockRunProfilePipeline = runProfilePipeline as jest.MockedFunction<
   typeof runProfilePipeline
 >;
+const mockRunMonthlyRefresh = runMonthlyRefresh as jest.MockedFunction<
+  typeof runMonthlyRefresh
+>;
+const mockExpandMatchPoolsForNewUser =
+  expandMatchPoolsForNewUser as jest.MockedFunction<
+    typeof expandMatchPoolsForNewUser
+  >;
+const mockTriggerMatchingForNewPairs =
+  triggerMatchingForNewPairs as jest.MockedFunction<
+    typeof triggerMatchingForNewPairs
+  >;
 const mockSetPipelineStage = setPipelineStage as jest.MockedFunction<
   typeof setPipelineStage
 >;
@@ -69,6 +86,12 @@ function makeQueuedJob(
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockExpandMatchPoolsForNewUser.mockResolvedValue({
+    userId: "user-1",
+    entriesCreated: 0,
+    affectedUserIds: [],
+  });
+  mockTriggerMatchingForNewPairs.mockResolvedValue(0);
   jest.spyOn(console, "log").mockImplementation(() => {});
   jest.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -500,7 +523,7 @@ describe("run_matching handler", () => {
   });
 });
 
-describe("unimplemented job type handlers", () => {
+describe("auxiliary job type handlers", () => {
   it("handles send_email without throwing", async () => {
     const processor = createJobProcessor(mockDeps);
     await expect(
@@ -515,7 +538,16 @@ describe("unimplemented job type handlers", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("handles monthly_refresh without throwing", async () => {
+  it("handles monthly_refresh by invoking the refresh service", async () => {
+    /** Verifies the worker delegates monthly refresh jobs to the dedicated service. */
+    mockRunMonthlyRefresh.mockResolvedValueOnce({
+      userId: "user-1",
+      status: "candidate_pending",
+      newPublicationsStored: 2,
+      changedFields: ["techniques"],
+      notified: true,
+    });
+
     const processor = createJobProcessor(mockDeps);
     await expect(
       processor(
@@ -525,17 +557,98 @@ describe("unimplemented job type handlers", () => {
         }),
       ),
     ).resolves.toBeUndefined();
+
+    expect(mockRunMonthlyRefresh).toHaveBeenCalledWith(
+      mockDeps.prisma,
+      mockDeps.anthropic,
+      "user-1",
+    );
   });
 
-  it("handles expand_match_pool without throwing", async () => {
+  it("rethrows monthly_refresh failures to enable queue retry", async () => {
+    /** Ensures transient refresh failures bubble up for queue-level retry behavior. */
+    mockRunMonthlyRefresh.mockRejectedValueOnce(
+      new Error("ORCID works fetch failed"),
+    );
+
+    const processor = createJobProcessor(mockDeps);
+    await expect(
+      processor(
+        makeQueuedJob({
+          type: "monthly_refresh",
+          userId: "user-1",
+        }),
+      ),
+    ).rejects.toThrow("ORCID works fetch failed");
+  });
+
+  it("handles expand_match_pool by calling expansion service and triggering matching", async () => {
+    /** Verifies the full expand_match_pool flow: expansion + matching triggers for affected users. */
+    mockExpandMatchPoolsForNewUser.mockResolvedValueOnce({
+      userId: "new-user-1",
+      entriesCreated: 2,
+      affectedUserIds: ["user-a", "user-b"],
+    });
+
     const processor = createJobProcessor(mockDeps);
     await expect(
       processor(
         makeQueuedJob({
           type: "expand_match_pool",
-          userId: "user-1",
+          userId: "new-user-1",
         }),
       ),
     ).resolves.toBeUndefined();
+
+    expect(mockExpandMatchPoolsForNewUser).toHaveBeenCalledWith(
+      mockDeps.prisma,
+      "new-user-1",
+    );
+    // Should trigger matching for each affected user paired with the new user
+    expect(mockTriggerMatchingForNewPairs).toHaveBeenCalledTimes(2);
+    expect(mockTriggerMatchingForNewPairs).toHaveBeenCalledWith("user-a", ["new-user-1"]);
+    expect(mockTriggerMatchingForNewPairs).toHaveBeenCalledWith("user-b", ["new-user-1"]);
+  });
+
+  it("skips matching triggers when expansion creates no entries", async () => {
+    /** No-op expansion (no matching selections) should not enqueue any matching jobs. */
+    mockExpandMatchPoolsForNewUser.mockResolvedValueOnce({
+      userId: "new-user-1",
+      entriesCreated: 0,
+      affectedUserIds: [],
+    });
+
+    const processor = createJobProcessor(mockDeps);
+    await processor(
+      makeQueuedJob({
+        type: "expand_match_pool",
+        userId: "new-user-1",
+      }),
+    );
+
+    expect(mockTriggerMatchingForNewPairs).not.toHaveBeenCalled();
+  });
+
+  it("rethrows expand_match_pool failures to enable queue retry", async () => {
+    /** Database errors during expansion should bubble up for queue-level retry. */
+    mockExpandMatchPoolsForNewUser.mockRejectedValueOnce(
+      new Error("Connection refused"),
+    );
+
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    const processor = createJobProcessor(mockDeps);
+    await expect(
+      processor(
+        makeQueuedJob({
+          type: "expand_match_pool",
+          userId: "new-user-1",
+        }),
+      ),
+    ).rejects.toThrow("Connection refused");
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("expand_match_pool"),
+    );
   });
 });

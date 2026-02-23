@@ -15,6 +15,7 @@
 import type { NextAuthOptions } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { prisma } from "@/lib/prisma";
+import { getJobQueue } from "@/lib/job-queue";
 import { fetchOrcidProfile, type OrcidProfile } from "@/lib/orcid";
 
 function getOrcidBaseUrl(): string {
@@ -154,7 +155,7 @@ export const authOptions: NextAuthOptions = {
           }
         } else {
           // New user — create account from ORCID data
-          await prisma.user.create({
+          const newUser = await prisma.user.create({
             data: {
               email: user.email ?? `${orcid}@orcid.placeholder`,
               name: user.name ?? orcid,
@@ -163,6 +164,18 @@ export const authOptions: NextAuthOptions = {
               orcid,
             },
           });
+
+          // Enqueue match pool expansion so existing users' affiliation/all-users
+          // selections automatically include this new user. Fire-and-forget:
+          // failures here don't block sign-in.
+          getJobQueue()
+            .enqueue({ type: "expand_match_pool", userId: newUser.id })
+            .catch((err) => {
+              console.error(
+                "[Auth] Failed to enqueue expand_match_pool:",
+                err,
+              );
+            });
         }
 
         return true;
