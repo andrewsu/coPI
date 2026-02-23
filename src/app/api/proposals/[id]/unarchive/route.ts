@@ -20,6 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { getUserSide } from "@/lib/utils";
 import { sendMatchNotificationEmails } from "@/services/match-notifications";
 import { sendRecruitmentEmailIfUnclaimed } from "@/services/recruitment-email";
+import type { InviteData } from "@/app/api/proposals/[id]/swipe/route";
 
 export async function POST(
   _request: Request,
@@ -129,6 +130,32 @@ export async function POST(
     },
   );
 
+  // Per spec: when a user moves to interested on a proposal involving an unclaimed
+  // researcher, show them a pre-filled invite email template they can copy/send.
+  let invite: InviteData | undefined;
+  const [otherUser, currentUser] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: otherUserId },
+      select: { claimedAt: true, name: true },
+    }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    }),
+  ]);
+
+  if (otherUser && otherUser.claimedAt === null) {
+    const oneLineSummary =
+      side === "a" ? proposal.oneLineSummaryA : proposal.oneLineSummaryB;
+    invite = {
+      collaboratorName: otherUser.name,
+      proposalTitle: proposal.title,
+      oneLineSummary,
+      inviterName: currentUser?.name ?? "A colleague",
+      claimUrl: `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/login`,
+    };
+  }
+
   return NextResponse.json({
     swipe: {
       id: updatedSwipe.id,
@@ -138,5 +165,6 @@ export async function POST(
     },
     matched,
     matchId,
+    invite,
   });
 }

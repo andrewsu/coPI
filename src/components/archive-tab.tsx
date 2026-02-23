@@ -23,6 +23,10 @@ import {
   ProposalDetailView,
 } from "@/components/swipe-queue";
 import type { ProposalCard } from "@/components/swipe-queue";
+import {
+  UnclaimedInviteModal,
+  type InviteModalData,
+} from "@/components/unclaimed-invite-modal";
 
 interface ArchivedProposal extends ProposalCard {
   archivedAt: string;
@@ -43,6 +47,7 @@ export function ArchiveTab() {
   );
   const [unarchiving, setUnarchiving] = useState<string | null>(null);
   const [matchBanner, setMatchBanner] = useState<string | null>(null);
+  const [inviteData, setInviteData] = useState<InviteModalData | null>(null);
 
   const fetchArchived = useCallback(async () => {
     try {
@@ -89,6 +94,7 @@ export function ArchiveTab() {
         const result = (await res.json()) as {
           matched: boolean;
           matchId?: string;
+          invite?: InviteModalData;
         };
 
         // Remove the proposal from the archive list
@@ -109,6 +115,11 @@ export function ArchiveTab() {
             `Match! You and ${collaboratorName} are both interested.`
           );
           setTimeout(() => setMatchBanner(null), 5000);
+        }
+
+        // Show invite modal when collaborator is unclaimed per spec
+        if (result.invite) {
+          setInviteData(result.invite);
         }
       } catch (err) {
         setError(
@@ -270,6 +281,14 @@ export function ArchiveTab() {
           );
         })}
       </div>
+
+      {/* Invite modal for unclaimed researchers */}
+      {inviteData && (
+        <UnclaimedInviteModal
+          data={inviteData}
+          onClose={() => setInviteData(null)}
+        />
+      )}
     </div>
   );
 }

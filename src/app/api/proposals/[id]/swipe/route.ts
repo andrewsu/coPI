@@ -32,6 +32,17 @@ interface SwipeRequestBody {
   timeSpentMs?: number;
 }
 
+/** Data returned when the other user on a proposal is unclaimed (seeded).
+ *  Per spec: "Show user A: 'Dr. [B] hasn't joined yet. Want to invite them?'
+ *  with a pre-filled email template they can copy/send directly." */
+export interface InviteData {
+  collaboratorName: string;
+  proposalTitle: string;
+  oneLineSummary: string;
+  inviterName: string;
+  claimUrl: string;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -197,6 +208,34 @@ export async function POST(
     showSurvey = archiveCount > 0 && archiveCount % SURVEY_INTERVAL === 0;
   }
 
+  // Per spec: when a user swipes interested on a proposal involving an unclaimed
+  // researcher, show them a pre-filled invite email template they can copy/send.
+  let invite: InviteData | undefined;
+  if (body.direction === "interested") {
+    const [otherUser, currentUser] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: otherUserId },
+        select: { claimedAt: true, name: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      }),
+    ]);
+
+    if (otherUser && otherUser.claimedAt === null) {
+      const oneLineSummary =
+        side === "a" ? proposal.oneLineSummaryA : proposal.oneLineSummaryB;
+      invite = {
+        collaboratorName: otherUser.name,
+        proposalTitle: proposal.title,
+        oneLineSummary,
+        inviterName: currentUser?.name ?? "A colleague",
+        claimUrl: `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/login`,
+      };
+    }
+  }
+
   return NextResponse.json({
     swipe: {
       id: swipe.id,
@@ -207,5 +246,6 @@ export async function POST(
     matched,
     matchId,
     showSurvey,
+    invite,
   });
 }

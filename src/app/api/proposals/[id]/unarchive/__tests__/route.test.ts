@@ -28,6 +28,9 @@ jest.mock("@/lib/prisma", () => ({
     match: {
       create: jest.fn(),
     },
+    user: {
+      findUnique: jest.fn(),
+    },
   },
 }));
 jest.mock("@/services/match-notifications", () => ({
@@ -47,6 +50,7 @@ const mockFindUnique = jest.mocked(prisma.collaborationProposal.findUnique);
 const mockProposalUpdate = jest.mocked(prisma.collaborationProposal.update);
 const mockSwipeUpdate = jest.mocked(prisma.swipe.update);
 const mockMatchCreate = jest.mocked(prisma.match.create);
+const mockUserFindUnique = jest.mocked(prisma.user.findUnique);
 const mockSendMatchNotifications = jest.mocked(sendMatchNotificationEmails);
 const mockSendRecruitmentEmail = jest.mocked(sendRecruitmentEmailIfUnclaimed);
 
@@ -60,6 +64,9 @@ function makeProposal(overrides: Record<string, unknown> = {}) {
     researcherBId: "user-zzz",
     visibilityA: "visible",
     visibilityB: "visible",
+    title: "Joint proteomics and metabolomics study",
+    oneLineSummaryA: "Combine your proteomics pipeline with their metabolomics data",
+    oneLineSummaryB: "Combine your metabolomics data with their proteomics pipeline",
     swipes: [
       { id: "swipe-1", userId: "user-aaa", direction: "archive" },
     ],
@@ -78,7 +85,14 @@ function makeRouteArgs(proposalId: string) {
 }
 
 describe("POST /api/proposals/[id]/unarchive", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Default: users are claimed (not seeded) — invite data not returned
+    mockUserFindUnique.mockResolvedValue({
+      claimedAt: new Date("2025-01-01"),
+      name: "Dr. Test User",
+    } as never);
+  });
 
   // --- Authentication & Authorization ---
 
@@ -451,5 +465,60 @@ describe("POST /api/proposals/[id]/unarchive", () => {
       "user-aaa",
       "proposal-1",
     );
+  });
+
+  // --- User-Facing Invite Template for Unclaimed Profiles ---
+
+  it("returns invite data when other user is unclaimed on unarchive", async () => {
+    /** Per spec: when a user moves to interested on a proposal involving an
+     *  unclaimed researcher, show them a pre-filled invite email template.
+     *  Unarchive expresses interest just like an initial swipe. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeUpdate.mockResolvedValue({
+      id: "swipe-1",
+      direction: "interested",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    mockUserFindUnique.mockImplementation(((args: { where: { id: string } }) => {
+      if (args.where.id === "user-zzz") {
+        return Promise.resolve({ claimedAt: null, name: "Dr. Unclaimed B" });
+      }
+      return Promise.resolve({ claimedAt: new Date(), name: "Dr. Active A" });
+    }) as never);
+
+    const res = await POST(...makeRouteArgs("proposal-1"));
+    const data = await res.json();
+
+    expect(data.invite).toBeDefined();
+    expect(data.invite.collaboratorName).toBe("Dr. Unclaimed B");
+    expect(data.invite.inviterName).toBe("Dr. Active A");
+    expect(data.invite.proposalTitle).toBe(
+      "Joint proteomics and metabolomics study"
+    );
+    expect(data.invite.oneLineSummary).toBe(
+      "Combine your proteomics pipeline with their metabolomics data"
+    );
+    expect(data.invite.claimUrl).toContain("/login");
+  });
+
+  it("does not return invite data when other user is claimed", async () => {
+    /** When the other user has already claimed their profile, no invite
+     *  data is returned — they're already on the platform. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeUpdate.mockResolvedValue({
+      id: "swipe-1",
+      direction: "interested",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    // Both users are claimed (default mock)
+
+    const res = await POST(...makeRouteArgs("proposal-1"));
+    const data = await res.json();
+
+    expect(data.invite).toBeUndefined();
   });
 });

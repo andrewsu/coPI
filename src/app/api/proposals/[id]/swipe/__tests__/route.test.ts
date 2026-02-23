@@ -29,6 +29,9 @@ jest.mock("@/lib/prisma", () => ({
     match: {
       create: jest.fn(),
     },
+    user: {
+      findUnique: jest.fn(),
+    },
   },
 }));
 jest.mock("@/services/match-notifications", () => ({
@@ -49,6 +52,7 @@ const mockProposalUpdate = jest.mocked(prisma.collaborationProposal.update);
 const mockSwipeCreate = jest.mocked(prisma.swipe.create);
 const mockSwipeCount = jest.mocked(prisma.swipe.count);
 const mockMatchCreate = jest.mocked(prisma.match.create);
+const mockUserFindUnique = jest.mocked(prisma.user.findUnique);
 const mockSendMatchNotifications = jest.mocked(sendMatchNotificationEmails);
 const mockSendRecruitmentEmail = jest.mocked(sendRecruitmentEmailIfUnclaimed);
 
@@ -62,6 +66,9 @@ function makeProposal(overrides: Record<string, unknown> = {}) {
     researcherBId: "user-zzz",
     visibilityA: "visible",
     visibilityB: "visible",
+    title: "Cross-lab CRISPR screens for neurodegeneration targets",
+    oneLineSummaryA: "Combine your CRISPR expertise with their neuronal models",
+    oneLineSummaryB: "Combine your neuronal models with their CRISPR expertise",
     swipes: [],
     ...overrides,
   };
@@ -89,6 +96,11 @@ describe("POST /api/proposals/[id]/swipe", () => {
     jest.clearAllMocks();
     // Default: archive count is 1 (not a survey trigger at interval=5)
     mockSwipeCount.mockResolvedValue(1);
+    // Default: users are claimed (not seeded) — invite data not returned
+    mockUserFindUnique.mockResolvedValue({
+      claimedAt: new Date("2025-01-01"),
+      name: "Dr. Test User",
+    } as never);
   });
 
   // --- Authentication & Authorization ---
@@ -817,5 +829,136 @@ describe("POST /api/proposals/[id]/swipe", () => {
     );
 
     expect(mockSendRecruitmentEmail).not.toHaveBeenCalled();
+  });
+
+  // --- User-Facing Invite Template for Unclaimed Profiles ---
+
+  it("returns invite data when other user is unclaimed on interested swipe", async () => {
+    /** Per spec: "Show user A: 'Dr. [B] hasn't joined yet. Want to invite them?'
+     *  with a pre-filled email template they can copy/send." When the other user
+     *  has claimedAt=null (seeded profile), the response includes invite data. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-invite-1",
+      direction: "interested",
+      viewedDetail: true,
+      timeSpentMs: 5000,
+    } as never);
+    // Other user (user-zzz) is unclaimed; current user (user-aaa) has a name
+    mockUserFindUnique.mockImplementation(((args: { where: { id: string } }) => {
+      if (args.where.id === "user-zzz") {
+        return Promise.resolve({ claimedAt: null, name: "Dr. Jane Smith" });
+      }
+      return Promise.resolve({ claimedAt: new Date(), name: "Dr. John Doe" });
+    }) as never);
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: true,
+        timeSpentMs: 5000,
+      })
+    );
+    const data = await res.json();
+
+    expect(data.invite).toBeDefined();
+    expect(data.invite.collaboratorName).toBe("Dr. Jane Smith");
+    expect(data.invite.inviterName).toBe("Dr. John Doe");
+    expect(data.invite.proposalTitle).toBe(
+      "Cross-lab CRISPR screens for neurodegeneration targets"
+    );
+    expect(data.invite.oneLineSummary).toBe(
+      "Combine your CRISPR expertise with their neuronal models"
+    );
+    expect(data.invite.claimUrl).toContain("/login");
+  });
+
+  it("does not return invite data when other user is claimed", async () => {
+    /** When the other user has already claimed their profile (claimedAt is set),
+     *  no invite data should be returned — the user is already on the platform. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-invite-2",
+      direction: "interested",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    // Both users are claimed (default mock)
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: false,
+      })
+    );
+    const data = await res.json();
+
+    expect(data.invite).toBeUndefined();
+  });
+
+  it("does not return invite data for archive swipes", async () => {
+    /** Invite templates are only shown for interested swipes, not archives.
+     *  The user hasn't expressed interest, so there's nothing to invite about. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-invite-3",
+      direction: "archive",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    // Other user is unclaimed, but direction is archive
+    mockUserFindUnique.mockResolvedValue({
+      claimedAt: null,
+      name: "Dr. Jane Smith",
+    } as never);
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "archive",
+        viewedDetail: false,
+      })
+    );
+    const data = await res.json();
+
+    expect(data.invite).toBeUndefined();
+  });
+
+  it("returns correct invite data from researcher B perspective", async () => {
+    /** When user B swipes interested on an unclaimed user A, the invite data
+     *  should use B's one-line summary and A's name. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-zzz" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-invite-4",
+      direction: "interested",
+      viewedDetail: true,
+      timeSpentMs: 2000,
+    } as never);
+    mockUserFindUnique.mockImplementation(((args: { where: { id: string } }) => {
+      if (args.where.id === "user-aaa") {
+        return Promise.resolve({ claimedAt: null, name: "Dr. Unclaimed A" });
+      }
+      return Promise.resolve({ claimedAt: new Date(), name: "Dr. Inviter B" });
+    }) as never);
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: true,
+        timeSpentMs: 2000,
+      })
+    );
+    const data = await res.json();
+
+    expect(data.invite).toBeDefined();
+    expect(data.invite.collaboratorName).toBe("Dr. Unclaimed A");
+    expect(data.invite.inviterName).toBe("Dr. Inviter B");
+    // User B sees oneLineSummaryB
+    expect(data.invite.oneLineSummary).toBe(
+      "Combine your neuronal models with their CRISPR expertise"
+    );
   });
 });

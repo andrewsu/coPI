@@ -27,6 +27,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { SurveyModal } from "@/components/survey-modal";
+import {
+  UnclaimedInviteModal,
+  type InviteModalData,
+} from "@/components/unclaimed-invite-modal";
 
 export interface ProposalCard {
   id: string;
@@ -139,6 +143,8 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
   const cardShownAtRef = useRef<Map<string, number>>(new Map());
   // Show periodic quality survey after Nth archive per spec
   const [showSurvey, setShowSurvey] = useState(false);
+  // Show invite modal when user swipes interested on unclaimed researcher
+  const [inviteData, setInviteData] = useState<InviteModalData | null>(null);
 
   const fetchProposals = useCallback(async () => {
     try {
@@ -205,6 +211,7 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
           matched: boolean;
           matchId?: string;
           showSurvey?: boolean;
+          invite?: InviteModalData;
         };
 
         // Mark that the user has swiped during this session
@@ -246,6 +253,11 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
         // Show periodic survey after Nth archive per spec
         if (result.showSurvey) {
           setShowSurvey(true);
+        }
+
+        // Show invite modal when collaborator is unclaimed per spec
+        if (result.invite) {
+          setInviteData(result.invite);
         }
       } catch (err) {
         setError(
@@ -312,6 +324,12 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
         <EmptyState hasMatchPool={hasMatchPool} reviewed={hasSwiped} />
         {showSurvey && (
           <SurveyModal onClose={() => setShowSurvey(false)} />
+        )}
+        {inviteData && (
+          <UnclaimedInviteModal
+            data={inviteData}
+            onClose={() => setInviteData(null)}
+          />
         )}
       </div>
     );
@@ -402,6 +420,14 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
       {/* Periodic quality survey modal */}
       {showSurvey && (
         <SurveyModal onClose={() => setShowSurvey(false)} />
+      )}
+
+      {/* Invite modal for unclaimed researchers */}
+      {inviteData && (
+        <UnclaimedInviteModal
+          data={inviteData}
+          onClose={() => setInviteData(null)}
+        />
       )}
     </div>
   );
