@@ -116,7 +116,7 @@
 - [x] Add `isAdmin` boolean field to User model, run migration
 - [x] Implement admin route protection middleware (check `isAdmin` on session)
 - [x] Build 403 page for non-admin users
-- [ ] Add admin link to nav/header (visible only to admin users)
+- [x] Add admin link to nav/header (visible only to admin users)
 - [x] Build Users Overview page (`/admin/users`) — sortable/filterable table
 - [x] Build User Detail page (`/admin/users/[id]`) — profile, publications, match pool, proposals
 - [x] Build Proposals Overview page (`/admin/proposals`) — sortable/filterable table

@@ -79,6 +79,14 @@ export default async function HomePage() {
             >
               Settings
             </Link>
+            {session.user.isAdmin && (
+              <Link
+                href="/admin"
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Admin
+              </Link>
+            )}
             <SignOutButton />
           </div>
         </div>

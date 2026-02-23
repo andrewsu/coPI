@@ -253,6 +253,8 @@ npm run type-check
 
 65. **Admin CLI for granting/revoking admin access:** `src/cli/admin-access.ts` is the admin CLI tool for granting or revoking admin access per user, per `specs/admin-dashboard.md`. Run with `npm run admin:grant -- <ORCID>` / `npm run admin:revoke -- <ORCID>` or directly `tsx src/cli/admin-access.ts grant|revoke <ORCID>`. Takes action (`grant` or `revoke`) as the first positional argument and ORCID as the second. Validates ORCID format using `ORCID_REGEX` from `src/services/seed-profile.ts`. `setAdminAccess(db, orcid, action)` is exported for testability — accepts an injected PrismaClient, finds the user by ORCID, rejects deleted users, and is idempotent (no-op if already in the target state). Exported helper functions for testability: `parseArgs()`, `validateOrcid()`, `setAdminAccess()`. Gated with `NODE_ENV !== "test"` to prevent `main()` from running during test imports (same pattern as `seed-profiles.ts`). Tests: `admin-access.test.ts` (20 tests). Focused verification: `source ~/.nvm/nvm.sh && npx jest src/cli/__tests__/admin-access.test.ts`.
 
+66. **Admin link in nav/header:** The home page (`src/app/page.tsx`) conditionally renders an "Admin" link in the header navigation when `session.user.isAdmin` is true. The link points to `/admin` and appears alongside the existing Profile, Match Pool, and Settings links. Non-admin users do not see the link. Per spec: "The admin dashboard link is only visible in the nav/header for admin users." Tests: `src/app/__tests__/page.test.tsx` (4 tests). Focused verification: `source ~/.nvm/nvm.sh && npx jest src/app/__tests__/page.test.tsx`.
+
 ## Specifications
 
 All specs are in the `specs/` directory. READ THEM before making changes:
