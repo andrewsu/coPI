@@ -232,6 +232,32 @@ export const authOptions: NextAuthOptions = {
         session.user.orcid = token.orcid;
       }
       session.user.isAdmin = token.isAdmin ?? false;
+
+      // Admin impersonation: if the copi-impersonate cookie is set and the
+      // real user (from JWT) is an admin, override session identity with
+      // the target user's data.
+      if (token.isAdmin) {
+        try {
+          const { cookies } = await import("next/headers");
+          const cookieStore = await cookies();
+          const impersonateId = cookieStore.get("copi-impersonate")?.value;
+          if (impersonateId) {
+            const target = await prisma.user.findUnique({
+              where: { id: impersonateId },
+              select: { id: true, orcid: true, name: true },
+            });
+            if (target) {
+              session.user.id = target.id;
+              session.user.orcid = target.orcid;
+              session.user.name = target.name;
+              session.user.isImpersonating = true;
+            }
+          }
+        } catch {
+          // cookies() unavailable outside request context (e.g. during build)
+        }
+      }
+
       return session;
     },
   },

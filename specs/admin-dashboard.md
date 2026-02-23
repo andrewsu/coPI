@@ -127,9 +127,63 @@ Aggregate statistics on the matching pipeline.
 - Eligible pairs evaluated → proposals generated → at least one "interested" swipe → mutual matches
 - Show counts and conversion rates at each stage
 
+### 6. Job Queue (`/admin/jobs`)
+
+A table of all jobs in the PostgreSQL-backed job queue, providing visibility into async task processing.
+
+**Summary Counts** (displayed above the table):
+- Total, pending, processing, completed, failed, dead
+
+**Table Columns:**
+- Type (human-readable label: Run Matching, Generate Profile, Send Email, Expand Match Pool, Monthly Refresh)
+- Status (color-coded badge: pending=yellow, processing=blue, completed=green, failed=red, dead=gray)
+- Payload summary (researcher names for `run_matching`, user name for profile/pool jobs, template/recipient for email jobs)
+- Attempts (shown as `N/maxN`)
+- Enqueued timestamp
+- Completed timestamp
+- Last error (truncated, shown for failed/dead jobs)
+
+**Filters:**
+- Status (all / pending / processing / completed / failed / dead)
+- Type (all / dynamically derived from data)
+
+**Sortable columns:** Type, Status, Attempts, Enqueued, Completed
+
+Researcher names in payload summaries are resolved via a batch user lookup. Unknown IDs fall back to a truncated UUID.
+
+### 7. User Impersonation
+
+Admins can assume the identity of any user by ORCID to see the app exactly as that user sees it.
+
+**Entry point:** An ORCID text input and "Go" button in the admin header bar, available on all admin pages.
+
+**Flow:**
+1. Admin enters an ORCID and clicks Go
+2. `POST /api/admin/impersonate` validates the ORCID, looks up the user, and sets a `copi-impersonate` httpOnly cookie
+3. If the ORCID doesn't exist in the system, the endpoint fetches the profile from the ORCID public API and creates a new User record (without `claimedAt`)
+4. Admin is redirected to `/` and sees the app as that user:
+   - No profile → redirected to `/onboarding` (profile pipeline runs)
+   - Has profile but no match pool → redirected to `/match-pool`
+   - Has profile and match pool → sees their proposal swipe queue
+5. An amber banner appears at the top of every page: "Impersonating [Name] (ORCID)" with a "Stop Impersonating" button
+6. Clicking Stop calls `DELETE /api/admin/impersonate`, clears the cookie, and redirects back to `/admin`
+
+**Implementation:**
+- The `copi-impersonate` cookie stores the target user's database ID
+- The NextAuth `session` callback checks this cookie; if present and the JWT has `isAdmin: true`, it overrides `session.user.id/orcid/name` with the target user's values and sets `session.user.isImpersonating = true`
+- All existing code automatically sees the impersonated identity (zero changes to API routes or components)
+- Middleware uses the raw JWT (`getToken()`), so admin route access is unaffected during impersonation
+- The impersonation API endpoint also uses `getToken()` to verify the caller is a real admin
+
+**Security:**
+- Only admins can impersonate (verified via raw JWT, not session)
+- The cookie alone grants no access — a valid admin JWT is required
+- Cookie expires after 24 hours
+- Cookie is httpOnly, secure in production, sameSite=lax
+
 ## Design Principles
 
-- **Read-only.** No edit/delete/trigger actions in v1. Admin actions stay in the CLI.
+- **Read-only.** No edit/delete/trigger actions in v1 (except impersonation). Admin actions stay in the CLI.
 - **Server-rendered.** Use Next.js server components — no client-side data fetching needed.
 - **Minimal styling.** Use the existing Tailwind setup. Tables with basic styling. No charts library — just numbers and text.
 - **No pagination in v1.** For pilot scale (tens to low hundreds of users), load all data. Add pagination later if needed.
@@ -145,6 +199,8 @@ All admin API routes live under `/api/admin/*` and check `isAdmin` on the sessio
 | `GET /api/admin/proposals` | List all proposals with swipe/match status |
 | `GET /api/admin/proposals/[id]` | Full proposal detail with swipes, match, LLM reasoning |
 | `GET /api/admin/stats` | Aggregate matching stats and funnel data |
+| `POST /api/admin/impersonate` | Start impersonating a user by ORCID (sets cookie) |
+| `DELETE /api/admin/impersonate` | Stop impersonating (clears cookie) |
 
 ## Data Model Changes
 
@@ -167,7 +223,6 @@ npm run admin:revoke -- <ORCID>
 
 - Edit or delete users/proposals from the admin UI
 - Trigger profile regeneration or matching from the admin UI
-- Job queue monitoring
 - Email delivery history
 - Real-time updates or websockets
 - Charts or graphs (just numbers and tables)

@@ -9,6 +9,7 @@
  */
 
 import Link from "next/link";
+import { ImpersonateForm } from "@/components/admin/impersonate-form";
 
 export default function AdminLayout({
   children,
@@ -53,12 +54,15 @@ export default function AdminLayout({
               </Link>
             </nav>
           </div>
-          <Link
-            href="/"
-            className="text-sm text-gray-500 hover:text-gray-700"
-          >
-            Back to App
-          </Link>
+          <div className="flex items-center gap-4">
+            <ImpersonateForm />
+            <Link
+              href="/"
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Back to App
+            </Link>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
