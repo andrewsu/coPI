@@ -75,7 +75,7 @@ services:
         awslogs-group: /copi/postgres
         awslogs-stream-prefix: postgres
         awslogs-create-group: "true"
-        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-region: ${AWS_REGION:-us-east-2}
     # No port exposure — only reachable within the Docker network.
     # Uncomment for direct DB access during debugging:
     # ports:
@@ -103,7 +103,7 @@ services:
         awslogs-group: /copi/migrate
         awslogs-stream-prefix: migrate
         awslogs-create-group: "true"
-        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-region: ${AWS_REGION:-us-east-2}
 
   # -----------------------------------------------------------
   # Next.js web application (standalone build)
@@ -140,7 +140,7 @@ services:
         awslogs-group: /copi/app
         awslogs-stream-prefix: app
         awslogs-create-group: "true"
-        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-region: ${AWS_REGION:-us-east-2}
 
   # -----------------------------------------------------------
   # Background job processor (profile generation, matching, email)
@@ -166,7 +166,7 @@ services:
         awslogs-group: /copi/worker
         awslogs-stream-prefix: worker
         awslogs-create-group: "true"
-        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-region: ${AWS_REGION:-us-east-2}
 
   # -----------------------------------------------------------
   # Nginx reverse proxy — HTTPS termination
@@ -208,7 +208,7 @@ services:
         awslogs-group: /copi/nginx
         awslogs-stream-prefix: nginx
         awslogs-create-group: "true"
-        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-region: ${AWS_REGION:-us-east-2}
 
   # -----------------------------------------------------------
   # Certbot — Let's Encrypt certificate renewal
@@ -231,7 +231,7 @@ services:
         awslogs-group: /copi/certbot
         awslogs-stream-prefix: certbot
         awslogs-create-group: "true"
-        awslogs-region: ${AWS_REGION:-us-east-1}
+        awslogs-region: ${AWS_REGION:-us-east-2}
 
 volumes:
   pgdata:
