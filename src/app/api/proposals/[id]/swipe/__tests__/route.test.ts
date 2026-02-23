@@ -24,6 +24,7 @@ jest.mock("@/lib/prisma", () => ({
     },
     swipe: {
       create: jest.fn(),
+      count: jest.fn(),
     },
     match: {
       create: jest.fn(),
@@ -38,6 +39,7 @@ const mockGetServerSession = jest.mocked(getServerSession);
 const mockFindUnique = jest.mocked(prisma.collaborationProposal.findUnique);
 const mockProposalUpdate = jest.mocked(prisma.collaborationProposal.update);
 const mockSwipeCreate = jest.mocked(prisma.swipe.create);
+const mockSwipeCount = jest.mocked(prisma.swipe.count);
 const mockMatchCreate = jest.mocked(prisma.match.create);
 
 const { POST } = require("../route");
@@ -73,7 +75,11 @@ function makeRouteArgs(
 }
 
 describe("POST /api/proposals/[id]/swipe", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Default: archive count is 1 (not a survey trigger at interval=5)
+    mockSwipeCount.mockResolvedValue(1);
+  });
 
   // --- Authentication & Authorization ---
 
@@ -541,5 +547,108 @@ describe("POST /api/proposals/[id]/swipe", () => {
     expect(data.matchId).toBe("match-3");
     // No visibility update needed since A is already visible
     expect(mockProposalUpdate).not.toHaveBeenCalled();
+  });
+
+  // --- Periodic Survey Trigger ---
+
+  it("returns showSurvey=true when archive count is a multiple of SURVEY_INTERVAL", async () => {
+    /** After every 5th archive action, the UI should show a quality survey.
+     *  The swipe endpoint counts all archive swipes for the user and returns
+     *  showSurvey=true when the count is divisible by SURVEY_INTERVAL (5). */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-11",
+      direction: "archive",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    // This is the user's 5th archive swipe (multiple of SURVEY_INTERVAL)
+    mockSwipeCount.mockResolvedValue(5);
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "archive",
+        viewedDetail: false,
+      })
+    );
+    const data = await res.json();
+
+    expect(data.showSurvey).toBe(true);
+    expect(mockSwipeCount).toHaveBeenCalledWith({
+      where: { userId: "user-aaa", direction: "archive" },
+    });
+  });
+
+  it("returns showSurvey=false when archive count is not a multiple of SURVEY_INTERVAL", async () => {
+    /** Archive swipes that are not on the Nth boundary should not trigger a survey. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-12",
+      direction: "archive",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    // 3rd archive — not a multiple of 5
+    mockSwipeCount.mockResolvedValue(3);
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "archive",
+        viewedDetail: false,
+      })
+    );
+    const data = await res.json();
+
+    expect(data.showSurvey).toBe(false);
+  });
+
+  it("returns showSurvey=true on 10th archive (second survey trigger)", async () => {
+    /** The survey should trigger at every multiple: 5, 10, 15, etc. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-13",
+      direction: "archive",
+      viewedDetail: false,
+      timeSpentMs: null,
+    } as never);
+    mockSwipeCount.mockResolvedValue(10);
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "archive",
+        viewedDetail: false,
+      })
+    );
+    const data = await res.json();
+
+    expect(data.showSurvey).toBe(true);
+  });
+
+  it("does not return showSurvey for interested swipes", async () => {
+    /** The periodic survey only triggers on archive actions, not interested. */
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-aaa" } });
+    mockFindUnique.mockResolvedValue(makeProposal() as never);
+    mockSwipeCreate.mockResolvedValue({
+      id: "swipe-14",
+      direction: "interested",
+      viewedDetail: true,
+      timeSpentMs: 5000,
+    } as never);
+
+    const res = await POST(
+      ...makeRouteArgs("proposal-1", {
+        direction: "interested",
+        viewedDetail: true,
+        timeSpentMs: 5000,
+      })
+    );
+    const data = await res.json();
+
+    // showSurvey should be false (default) — count is not called for interested
+    expect(data.showSurvey).toBe(false);
+    expect(mockSwipeCount).not.toHaveBeenCalled();
   });
 });

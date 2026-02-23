@@ -7,8 +7,9 @@
  *   - Flips other user's visibility from pending_other_interest → visible
  * For "archive" swipes:
  *   - No visibility changes (pending_other_interest stays, proposal is dead)
+ *   - Checks if it's time to show the periodic survey (every Nth archive)
  *
- * Returns: { swipe, matched, matchId? }
+ * Returns: { swipe, matched, matchId?, showSurvey? }
  *
  * Spec reference: specs/swipe-interface.md, "Swipe Actions" and
  * "What Happens After Each Action" sections.
@@ -19,6 +20,9 @@ import { NextResponse } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getUserSide } from "@/lib/utils";
+
+/** Show the periodic survey after every Nth archive action per spec. */
+export const SURVEY_INTERVAL = 5;
 
 interface SwipeRequestBody {
   direction: "interested" | "archive";
@@ -158,6 +162,17 @@ export async function POST(
   // Archive direction: no visibility changes needed per spec.
   // pending_other_interest stays — proposal is effectively dead.
 
+  // For archive swipes, check if we should show the periodic survey.
+  // The survey appears after every Nth archive action (default 5).
+  let showSurvey = false;
+  if (body.direction === "archive") {
+    const archiveCount = await prisma.swipe.count({
+      where: { userId, direction: "archive" },
+    });
+    // archiveCount includes the swipe we just created
+    showSurvey = archiveCount > 0 && archiveCount % SURVEY_INTERVAL === 0;
+  }
+
   return NextResponse.json({
     swipe: {
       id: swipe.id,
@@ -167,5 +182,6 @@ export async function POST(
     },
     matched,
     matchId,
+    showSurvey,
   });
 }

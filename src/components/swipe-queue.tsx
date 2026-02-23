@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import { SurveyModal } from "@/components/survey-modal";
 
 export interface ProposalCard {
   id: string;
@@ -136,6 +137,8 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
   );
   // Track when each card was first shown (for timeSpentMs analytics)
   const cardShownAtRef = useRef<Map<string, number>>(new Map());
+  // Show periodic quality survey after Nth archive per spec
+  const [showSurvey, setShowSurvey] = useState(false);
 
   const fetchProposals = useCallback(async () => {
     try {
@@ -201,6 +204,7 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
         const result = (await res.json()) as {
           matched: boolean;
           matchId?: string;
+          showSurvey?: boolean;
         };
 
         // Mark that the user has swiped during this session
@@ -237,6 +241,11 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
             `Match! You and ${currentProposal.collaborator.name} are both interested.`
           );
           setTimeout(() => setMatchBanner(null), 5000);
+        }
+
+        // Show periodic survey after Nth archive per spec
+        if (result.showSurvey) {
+          setShowSurvey(true);
         }
       } catch (err) {
         setError(
@@ -301,6 +310,9 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
           </div>
         )}
         <EmptyState hasMatchPool={hasMatchPool} reviewed={hasSwiped} />
+        {showSurvey && (
+          <SurveyModal onClose={() => setShowSurvey(false)} />
+        )}
       </div>
     );
   }
@@ -386,6 +398,11 @@ export function SwipeQueue({ hasMatchPool }: SwipeQueueProps) {
           Interested
         </button>
       </div>
+
+      {/* Periodic quality survey modal */}
+      {showSurvey && (
+        <SurveyModal onClose={() => setShowSurvey(false)} />
+      )}
     </div>
   );
 }
