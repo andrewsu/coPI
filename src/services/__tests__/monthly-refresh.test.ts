@@ -214,6 +214,7 @@ describe("runMonthlyRefresh", () => {
         templateId: "profile_refresh_candidate",
         to: "jane@example.com",
       }),
+      { priority: -10 },
     );
   });
 

@@ -16,7 +16,7 @@ import type { PrismaClient } from "@prisma/client";
 import type Anthropic from "@anthropic-ai/sdk";
 import { fetchOrcidProfile } from "@/lib/orcid";
 import { runProfilePipeline, type PipelineResult } from "./profile-pipeline";
-import { getJobQueue } from "@/lib/job-queue";
+import { getJobQueue, JobPriority } from "@/lib/job-queue";
 
 /** Validates ORCID iD format (e.g., "0000-0002-1234-5678"). Last char can be X (checksum). */
 const ORCID_REGEX = /^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/;
@@ -103,7 +103,10 @@ export async function seedProfile(
   // selections automatically include this new seeded user
   options?.onProgress?.(orcid, "expanding_match_pools");
   getJobQueue()
-    .enqueue({ type: "expand_match_pool", userId: user.id })
+    .enqueue(
+      { type: "expand_match_pool", userId: user.id },
+      { priority: JobPriority.BACKGROUND },
+    )
     .catch((err) => {
       console.error(
         `[SeedProfile] Failed to enqueue expand_match_pool for ${orcid}:`,

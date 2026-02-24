@@ -17,7 +17,7 @@ import { anthropic } from "@/lib/anthropic";
 async function main(): Promise<void> {
   console.log("[Worker] Starting job queue worker...");
 
-  const queue = getJobQueue();
+  const queue = getJobQueue({ concurrency: 5 });
   const processor = createJobProcessor({ prisma, anthropic });
 
   queue.start(processor);

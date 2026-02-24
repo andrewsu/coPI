@@ -85,6 +85,45 @@ export type JobHandler = (job: QueuedJob) => Promise<void>;
 export interface EnqueueOptions {
   /** Maximum processing attempts before dead-lettering (default: 3). */
   maxAttempts?: number;
+  /** Priority level — higher values are processed first (default: 0). */
+  priority?: number;
+}
+
+/** Named priority levels for job scheduling. */
+export const JobPriority = {
+  BACKGROUND: -10,
+  NORMAL: 0,
+  INTERACTIVE: 10,
+} as const;
+
+// --- Deduplication ---
+
+import { createHash } from "crypto";
+
+/**
+ * Computes a dedup hash for a job payload, or null if the job type
+ * should not be deduplicated (e.g. send_email, monthly_refresh).
+ */
+export function computePayloadHash(payload: JobPayload): string | null {
+  switch (payload.type) {
+    case "run_matching": {
+      const ids = [payload.researcherAId, payload.researcherBId].sort();
+      return createHash("sha256")
+        .update(`run_matching:${ids[0]}:${ids[1]}`)
+        .digest("hex");
+    }
+    case "generate_profile":
+      return createHash("sha256")
+        .update(`generate_profile:${payload.userId}`)
+        .digest("hex");
+    case "expand_match_pool":
+      return createHash("sha256")
+        .update(`expand_match_pool:${payload.userId}`)
+        .digest("hex");
+    case "send_email":
+    case "monthly_refresh":
+      return null;
+  }
 }
 
 // --- Queue interface ---
@@ -113,6 +152,8 @@ export interface JobQueue {
 
 interface TrackedJob extends QueuedJob {
   status: JobStatus;
+  priority: number;
+  payloadHash: string | null;
 }
 
 /**
@@ -159,7 +200,22 @@ export class InMemoryJobQueue implements JobQueue {
     payload: JobPayload,
     options?: EnqueueOptions,
   ): Promise<string> {
+    const hash = computePayloadHash(payload);
+
+    // Dedup: if a pending/processing job with the same hash exists, return its ID
+    if (hash) {
+      for (const [existingId, tracked] of this.tracked) {
+        if (
+          tracked.payloadHash === hash &&
+          (tracked.status === "pending" || tracked.status === "processing")
+        ) {
+          return existingId;
+        }
+      }
+    }
+
     const id = `job_${++this.nextId}_${Date.now()}`;
+    const priority = options?.priority ?? 0;
     const job: QueuedJob = {
       id,
       payload,
@@ -169,7 +225,7 @@ export class InMemoryJobQueue implements JobQueue {
     };
 
     this.queue.push(job);
-    this.tracked.set(id, { ...job, status: "pending" });
+    this.tracked.set(id, { ...job, status: "pending", priority, payloadHash: hash });
 
     // Trigger processing if running and idle
     if (this.running && !this.activePromise) {
@@ -266,14 +322,29 @@ export class InMemoryJobQueue implements JobQueue {
   private processNext(): void {
     if (!this.handler || this.queue.length === 0) return;
 
-    // Find the first job that is ready to process (respects retryAfter backoff)
+    // Find the best ready job: highest priority first, then earliest enqueue time
     const now = Date.now();
-    const readyIndex = this.queue.findIndex(
-      (j) => !j.retryAfter || j.retryAfter.getTime() <= now,
-    );
-    if (readyIndex === -1) return; // All jobs are waiting for retry backoff
+    let bestIndex = -1;
+    let bestPriority = -Infinity;
+    let bestEnqueued = Infinity;
 
-    const job = this.queue.splice(readyIndex, 1)[0];
+    for (let i = 0; i < this.queue.length; i++) {
+      const j = this.queue[i]!;
+      if (j.retryAfter && j.retryAfter.getTime() > now) continue;
+      const tracked = this.tracked.get(j.id);
+      const pri = tracked?.priority ?? 0;
+      if (
+        pri > bestPriority ||
+        (pri === bestPriority && j.enqueuedAt.getTime() < bestEnqueued)
+      ) {
+        bestIndex = i;
+        bestPriority = pri;
+        bestEnqueued = j.enqueuedAt.getTime();
+      }
+    }
+    if (bestIndex === -1) return; // All jobs are waiting for retry backoff
+
+    const job = this.queue.splice(bestIndex, 1)[0];
     if (!job) return;
 
     const tracked = this.tracked.get(job.id);
@@ -350,10 +421,15 @@ const globalForQueue = globalThis as unknown as {
  * The queue is created unstarted — call start(handler) to begin
  * processing jobs. Jobs can be enqueued before starting; they
  * persist in the database and are processed once a worker calls start().
+ *
+ * Options (only used when creating the singleton for the first time):
+ * - concurrency: max parallel jobs the worker processes (default: 1)
  */
-export function getJobQueue(): PostgresJobQueue {
+export function getJobQueue(options?: { concurrency?: number }): PostgresJobQueue {
   if (!globalForQueue.jobQueue) {
-    globalForQueue.jobQueue = new PostgresJobQueue(prisma);
+    globalForQueue.jobQueue = new PostgresJobQueue(prisma, {
+      concurrency: options?.concurrency,
+    });
   }
   return globalForQueue.jobQueue;
 }

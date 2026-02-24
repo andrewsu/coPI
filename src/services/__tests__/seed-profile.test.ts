@@ -23,6 +23,7 @@ jest.mock("../profile-pipeline", () => ({
 
 jest.mock("@/lib/job-queue", () => ({
   getJobQueue: jest.fn(),
+  JobPriority: { BACKGROUND: -10, NORMAL: 0, INTERACTIVE: 10 },
 }));
 
 import { fetchOrcidProfile } from "@/lib/orcid";
@@ -258,10 +259,13 @@ describe("seedProfile", () => {
 
     await seedProfile(prisma, llm, "0000-0002-1234-5678");
 
-    expect(mockEnqueue).toHaveBeenCalledWith({
-      type: "expand_match_pool",
-      userId: "seeded-user-uuid",
-    });
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      {
+        type: "expand_match_pool",
+        userId: "seeded-user-uuid",
+      },
+      { priority: -10 },
+    );
   });
 
   it("calls onProgress callback at each stage", async () => {

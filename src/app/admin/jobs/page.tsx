@@ -16,6 +16,7 @@ export interface AdminJob {
   id: string;
   type: string;
   status: JobStatus;
+  priority: number;
   payloadSummary: string;
   attempts: number;
   maxAttempts: number;
@@ -97,6 +98,7 @@ export default async function AdminJobsPage() {
     id: job.id,
     type: job.type,
     status: job.status,
+    priority: job.priority,
     payloadSummary: summarizePayload(job.type, job.payload as Record<string, unknown>),
     attempts: job.attempts,
     maxAttempts: job.maxAttempts,

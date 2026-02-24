@@ -15,7 +15,7 @@
 import type { NextAuthOptions } from "next-auth";
 import type { OAuthConfig } from "next-auth/providers/oauth";
 import { prisma } from "@/lib/prisma";
-import { getJobQueue } from "@/lib/job-queue";
+import { getJobQueue, JobPriority } from "@/lib/job-queue";
 import { fetchOrcidProfile, type OrcidProfile } from "@/lib/orcid";
 import { flipPendingProposalsOnClaim } from "@/services/seed-profile";
 
@@ -191,7 +191,10 @@ export const authOptions: NextAuthOptions = {
           // selections automatically include this new user. Fire-and-forget:
           // failures here don't block sign-in.
           getJobQueue()
-            .enqueue({ type: "expand_match_pool", userId: newUser.id })
+            .enqueue(
+              { type: "expand_match_pool", userId: newUser.id },
+              { priority: JobPriority.BACKGROUND },
+            )
             .catch((err) => {
               console.error(
                 "[Auth] Failed to enqueue expand_match_pool:",

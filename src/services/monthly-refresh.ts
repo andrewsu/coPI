@@ -13,7 +13,7 @@ import type { PrismaClient, Prisma } from "@prisma/client";
 import type Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "crypto";
 
-import { getJobQueue } from "@/lib/job-queue";
+import { getJobQueue, JobPriority } from "@/lib/job-queue";
 import { buildUnsubscribeUrl } from "@/lib/unsubscribe-token";
 import { fetchOrcidGrantTitles, fetchOrcidWorks, type OrcidWork } from "@/lib/orcid";
 import {
@@ -346,17 +346,20 @@ export async function runMonthlyRefresh(
     user.email &&
     !user.email.endsWith("@orcid.placeholder")
   ) {
-    await getJobQueue().enqueue({
-      type: "send_email",
-      templateId: "profile_refresh_candidate",
-      to: user.email,
-      data: {
-        recipientName: user.name,
-        newPublicationTitles: newWorks.map((work) => work.title),
-        changedFields,
-        unsubscribeUrl: buildUnsubscribeUrl(userId, "profile_refresh"),
+    await getJobQueue().enqueue(
+      {
+        type: "send_email",
+        templateId: "profile_refresh_candidate",
+        to: user.email,
+        data: {
+          recipientName: user.name,
+          newPublicationTitles: newWorks.map((work) => work.title),
+          changedFields,
+          unsubscribeUrl: buildUnsubscribeUrl(userId, "profile_refresh"),
+        },
       },
-    });
+      { priority: JobPriority.BACKGROUND },
+    );
     notified = true;
   }
 

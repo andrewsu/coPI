@@ -12,6 +12,8 @@ import {
   type JobPayload,
   type QueuedJob,
   getJobQueue,
+  computePayloadHash,
+  JobPriority,
 } from "../job-queue";
 import { PostgresJobQueue } from "../postgres-job-queue";
 
@@ -37,11 +39,15 @@ describe("InMemoryJobQueue", () => {
     queue._reset();
   });
 
-  const makePayload = (type: string = "run_matching"): JobPayload => ({
-    type: "run_matching",
-    researcherAId: `a-${type}`,
-    researcherBId: `b-${type}`,
-  });
+  let payloadCounter = 0;
+  const makePayload = (suffix?: string): JobPayload => {
+    const tag = suffix ?? String(++payloadCounter);
+    return {
+      type: "run_matching",
+      researcherAId: `a-${tag}`,
+      researcherBId: `b-${tag}`,
+    };
+  };
 
   // --- Enqueue ---
 
@@ -499,6 +505,177 @@ describe("InMemoryJobQueue", () => {
 
     await backoffQueue.stop();
     backoffQueue._reset();
+  });
+
+  // --- Priority ordering ---
+
+  it("processes higher-priority jobs before lower-priority ones", async () => {
+    const order: string[] = [];
+    const handler = async (job: QueuedJob) => {
+      const payload = job.payload as { researcherAId: string };
+      order.push(payload.researcherAId);
+    };
+
+    await queue.enqueue(
+      { type: "run_matching", researcherAId: "low", researcherBId: "x1" },
+      { priority: JobPriority.BACKGROUND },
+    );
+    await queue.enqueue(
+      { type: "run_matching", researcherAId: "high", researcherBId: "x2" },
+      { priority: JobPriority.INTERACTIVE },
+    );
+    await queue.enqueue(
+      { type: "run_matching", researcherAId: "normal", researcherBId: "x3" },
+      { priority: JobPriority.NORMAL },
+    );
+
+    queue.start(handler);
+    await queue.waitForIdle();
+
+    expect(order).toEqual(["high", "normal", "low"]);
+  });
+
+  it("uses FIFO within the same priority level", async () => {
+    const order: string[] = [];
+    const handler = async (job: QueuedJob) => {
+      const payload = job.payload as { researcherAId: string };
+      order.push(payload.researcherAId);
+    };
+
+    await queue.enqueue(
+      { type: "run_matching", researcherAId: "first", researcherBId: "y1" },
+      { priority: JobPriority.NORMAL },
+    );
+    await queue.enqueue(
+      { type: "run_matching", researcherAId: "second", researcherBId: "y2" },
+      { priority: JobPriority.NORMAL },
+    );
+    await queue.enqueue(
+      { type: "run_matching", researcherAId: "third", researcherBId: "y3" },
+      { priority: JobPriority.NORMAL },
+    );
+
+    queue.start(handler);
+    await queue.waitForIdle();
+
+    expect(order).toEqual(["first", "second", "third"]);
+  });
+
+  // --- Deduplication ---
+
+  it("deduplicates pending jobs with the same payload hash", async () => {
+    const payload: JobPayload = {
+      type: "run_matching",
+      researcherAId: "dup-a",
+      researcherBId: "dup-b",
+    };
+
+    const id1 = await queue.enqueue(payload);
+    const id2 = await queue.enqueue(payload);
+
+    expect(id1).toBe(id2);
+    expect(queue.pendingCount()).toBe(1);
+  });
+
+  it("deduplicates regardless of researcher ID order (run_matching)", async () => {
+    const id1 = await queue.enqueue({
+      type: "run_matching",
+      researcherAId: "aaa",
+      researcherBId: "bbb",
+    });
+    const id2 = await queue.enqueue({
+      type: "run_matching",
+      researcherAId: "bbb",
+      researcherBId: "aaa",
+    });
+
+    expect(id1).toBe(id2);
+  });
+
+  it("does not deduplicate send_email jobs", async () => {
+    const payload: JobPayload = {
+      type: "send_email",
+      templateId: "test",
+      to: "a@b.com",
+      data: {},
+    };
+
+    const id1 = await queue.enqueue(payload);
+    const id2 = await queue.enqueue(payload);
+
+    expect(id1).not.toBe(id2);
+    expect(queue.pendingCount()).toBe(2);
+  });
+
+  it("allows re-enqueue after original job completes", async () => {
+    const handler = async (_job: QueuedJob) => {};
+    const payload: JobPayload = {
+      type: "generate_profile",
+      userId: "u1",
+      orcid: "0000-0000-0000-0001",
+    };
+
+    const id1 = await queue.enqueue(payload);
+    queue.start(handler);
+    await queue.waitForIdle();
+
+    // Job is completed now — enqueueing same payload should create a new job
+    const id2 = await queue.enqueue(payload);
+    expect(id2).not.toBe(id1);
+  });
+});
+
+describe("computePayloadHash", () => {
+  it("returns identical hash for run_matching regardless of ID order", () => {
+    const h1 = computePayloadHash({
+      type: "run_matching",
+      researcherAId: "aaa",
+      researcherBId: "bbb",
+    });
+    const h2 = computePayloadHash({
+      type: "run_matching",
+      researcherAId: "bbb",
+      researcherBId: "aaa",
+    });
+    expect(h1).toBe(h2);
+    expect(h1).toHaveLength(64); // SHA-256 hex
+  });
+
+  it("returns a hash for generate_profile", () => {
+    const h = computePayloadHash({
+      type: "generate_profile",
+      userId: "u1",
+      orcid: "0000-0000-0000-0001",
+    });
+    expect(h).toHaveLength(64);
+  });
+
+  it("returns a hash for expand_match_pool", () => {
+    const h = computePayloadHash({
+      type: "expand_match_pool",
+      userId: "u1",
+    });
+    expect(h).toHaveLength(64);
+  });
+
+  it("returns null for send_email", () => {
+    expect(
+      computePayloadHash({
+        type: "send_email",
+        templateId: "t",
+        to: "a@b.com",
+        data: {},
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for monthly_refresh", () => {
+    expect(
+      computePayloadHash({
+        type: "monthly_refresh",
+        userId: "u1",
+      }),
+    ).toBeNull();
   });
 });
 

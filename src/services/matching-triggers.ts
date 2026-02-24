@@ -14,7 +14,7 @@
  */
 
 import type { PrismaClient } from "@prisma/client";
-import { getJobQueue } from "@/lib/job-queue";
+import { getJobQueue, JobPriority } from "@/lib/job-queue";
 import { orderUserIds } from "@/lib/utils";
 import { computeEligiblePairs } from "@/services/eligible-pairs";
 
@@ -153,11 +153,14 @@ export async function triggerScheduledMatchingRun(
   let enqueued = 0;
 
   for (const pair of eligiblePairs) {
-    await queue.enqueue({
-      type: "run_matching",
-      researcherAId: pair.researcherAId,
-      researcherBId: pair.researcherBId,
-    });
+    await queue.enqueue(
+      {
+        type: "run_matching",
+        researcherAId: pair.researcherAId,
+        researcherBId: pair.researcherBId,
+      },
+      { priority: JobPriority.BACKGROUND },
+    );
     enqueued++;
   }
 

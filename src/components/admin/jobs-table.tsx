@@ -11,7 +11,7 @@ import { useState, useMemo } from "react";
 import type { AdminJob } from "@/app/admin/jobs/page";
 import type { JobStatus } from "@prisma/client";
 
-type SortField = "type" | "status" | "attempts" | "enqueuedAt" | "completedAt";
+type SortField = "type" | "status" | "priority" | "attempts" | "enqueuedAt" | "completedAt";
 type SortDirection = "asc" | "desc";
 
 const STATUS_LABELS: Record<JobStatus, string> = {
@@ -36,6 +36,18 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   send_email: "Send Email",
   expand_match_pool: "Expand Match Pool",
   monthly_refresh: "Monthly Refresh",
+};
+
+function formatPriority(priority: number): string {
+  if (priority <= -10) return "Background";
+  if (priority >= 10) return "Interactive";
+  return "Normal";
+}
+
+const PRIORITY_COLORS: Record<string, string> = {
+  Background: "text-gray-400",
+  Normal: "text-gray-700",
+  Interactive: "text-indigo-600 font-medium",
 };
 
 function formatDateTime(iso: string | null): string {
@@ -83,6 +95,9 @@ export function JobsTable({ jobs }: JobsTableProps) {
           break;
         case "status":
           cmp = a.status.localeCompare(b.status);
+          break;
+        case "priority":
+          cmp = a.priority - b.priority;
           break;
         case "attempts":
           cmp = a.attempts - b.attempts;
@@ -197,6 +212,13 @@ export function JobsTable({ jobs }: JobsTableProps) {
                 direction={sortDirection}
                 onClick={handleSort}
               />
+              <SortableHeader
+                label="Priority"
+                field="priority"
+                current={sortField}
+                direction={sortDirection}
+                onClick={handleSort}
+              />
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Payload
               </th>
@@ -230,7 +252,7 @@ export function JobsTable({ jobs }: JobsTableProps) {
             {filteredAndSorted.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-4 py-12 text-center text-sm text-gray-400"
                 >
                   No jobs match the current filters.
@@ -248,6 +270,9 @@ export function JobsTable({ jobs }: JobsTableProps) {
                     >
                       {STATUS_LABELS[job.status]}
                     </span>
+                  </td>
+                  <td className={`px-4 py-3 text-sm whitespace-nowrap ${PRIORITY_COLORS[formatPriority(job.priority)] ?? "text-gray-700"}`}>
+                    {formatPriority(job.priority)}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700 max-w-xs truncate" title={job.payloadSummary}>
                     {job.payloadSummary}

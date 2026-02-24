@@ -6,8 +6,8 @@
  * the Next.js app and worker to run as separate processes/containers
  * sharing the same Postgres database.
  *
- * Replaces InMemoryJobQueue for production deployments where the
- * app (enqueuer) and worker (processor) are in separate containers.
+ * Supports concurrent processing, priority-based ordering, and
+ * payload-hash deduplication.
  */
 
 import type { PrismaClient, Prisma } from "@prisma/client";
@@ -19,12 +19,15 @@ import type {
   JobStatus,
   EnqueueOptions,
 } from "@/lib/job-queue";
+import { computePayloadHash } from "@/lib/job-queue";
 
 interface ClaimedJobRow {
   id: string;
   type: string;
   payload: unknown;
   status: string;
+  priority: number;
+  payload_hash: string | null;
   attempts: number;
   max_attempts: number;
   last_error: string | null;
@@ -37,12 +40,13 @@ interface ClaimedJobRow {
 export class PostgresJobQueue implements JobQueue {
   private handler: JobHandler | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private activePromise: Promise<void> | null = null;
+  private readonly activeJobs = new Set<Promise<void>>();
   private running = false;
   private readonly pollIntervalMs: number;
   private readonly defaultMaxAttempts: number;
   private readonly retryBaseDelayMs: number;
   private readonly retryMaxDelayMs: number;
+  private readonly concurrency: number;
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -51,23 +55,41 @@ export class PostgresJobQueue implements JobQueue {
       maxAttempts?: number;
       retryBaseDelayMs?: number;
       retryMaxDelayMs?: number;
+      concurrency?: number;
     },
   ) {
     this.pollIntervalMs = options?.pollIntervalMs ?? 2000;
     this.defaultMaxAttempts = options?.maxAttempts ?? 3;
     this.retryBaseDelayMs = options?.retryBaseDelayMs ?? 1000;
     this.retryMaxDelayMs = options?.retryMaxDelayMs ?? 30000;
+    this.concurrency = options?.concurrency ?? 1;
   }
 
   async enqueue(
     payload: JobPayload,
     options?: EnqueueOptions,
   ): Promise<string> {
+    const payloadHash = computePayloadHash(payload);
+
+    // Dedup: if a pending/processing job with the same hash exists, return its ID
+    if (payloadHash) {
+      const existing = await this.prisma.job.findFirst({
+        where: {
+          payloadHash,
+          status: { in: ["pending", "processing"] },
+        },
+        select: { id: true },
+      });
+      if (existing) return existing.id;
+    }
+
     const job = await this.prisma.job.create({
       data: {
         type: payload.type,
         payload: payload as unknown as Prisma.InputJsonValue,
         status: "pending",
+        priority: options?.priority ?? 0,
+        payloadHash,
         maxAttempts: options?.maxAttempts ?? this.defaultMaxAttempts,
       },
     });
@@ -80,7 +102,7 @@ export class PostgresJobQueue implements JobQueue {
     this.running = true;
 
     this.pollTimer = setInterval(() => {
-      if (!this.activePromise) {
+      if (this.activeJobs.size < this.concurrency) {
         this.claimAndProcess();
       }
     }, this.pollIntervalMs);
@@ -95,8 +117,8 @@ export class PostgresJobQueue implements JobQueue {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    if (this.activePromise) {
-      await this.activePromise;
+    if (this.activeJobs.size > 0) {
+      await Promise.allSettled([...this.activeJobs]);
     }
     this.handler = null;
   }
@@ -129,45 +151,56 @@ export class PostgresJobQueue implements JobQueue {
   private claimAndProcess(): void {
     if (!this.handler) return;
 
-    this.activePromise = this.claimOne()
-      .then((job) => {
-        if (job && this.handler) {
-          return this.executeJob(job);
+    const freeSlots = this.concurrency - this.activeJobs.size;
+    if (freeSlots <= 0) return;
+
+    const batchPromise = this.claimMany(freeSlots)
+      .then((jobs) => {
+        for (const job of jobs) {
+          if (!this.handler) break;
+          const jobPromise = this.executeJob(job)
+            .catch((err) => {
+              console.error("[PostgresJobQueue] Error processing job:", err);
+            })
+            .finally(() => {
+              this.activeJobs.delete(jobPromise);
+            });
+          this.activeJobs.add(jobPromise);
         }
       })
       .catch((err) => {
-        console.error("[PostgresJobQueue] Error in claim/process cycle:", err);
-      })
-      .finally(() => {
-        this.activePromise = null;
+        console.error("[PostgresJobQueue] Error in claim cycle:", err);
       });
+
+    // Track the claim batch itself briefly so stop() can wait for it
+    const sentinel = batchPromise.finally(() => {
+      this.activeJobs.delete(sentinel);
+    });
+    this.activeJobs.add(sentinel);
   }
 
   /**
-   * Atomically claim one pending job using FOR UPDATE SKIP LOCKED.
-   * This prevents multiple workers from processing the same job.
+   * Atomically claim up to `limit` pending jobs using FOR UPDATE SKIP LOCKED.
+   * Orders by priority DESC (higher = first), then enqueued_at ASC (FIFO within same priority).
    */
-  private async claimOne(): Promise<
-    (QueuedJob & { status: JobStatus }) | null
-  > {
+  private async claimMany(
+    limit: number,
+  ): Promise<(QueuedJob & { status: JobStatus })[]> {
     const rows = await this.prisma.$queryRaw<ClaimedJobRow[]>`
       UPDATE jobs
       SET status = 'processing', started_at = NOW(), attempts = attempts + 1
-      WHERE id = (
+      WHERE id IN (
         SELECT id FROM jobs
         WHERE status = 'pending'
           AND (retry_after IS NULL OR retry_after <= NOW())
-        ORDER BY enqueued_at ASC
-        LIMIT 1
+        ORDER BY priority DESC, enqueued_at ASC
+        LIMIT ${limit}
         FOR UPDATE SKIP LOCKED
       )
       RETURNING *
     `;
 
-    if (rows.length === 0) return null;
-
-    const row = rows[0]!;
-    return {
+    return rows.map((row) => ({
       id: row.id,
       payload: row.payload as unknown as JobPayload,
       enqueuedAt: row.enqueued_at,
@@ -176,7 +209,7 @@ export class PostgresJobQueue implements JobQueue {
       lastError: row.last_error ?? undefined,
       retryAfter: row.retry_after ?? undefined,
       status: row.status as JobStatus,
-    };
+    }));
   }
 
   /**

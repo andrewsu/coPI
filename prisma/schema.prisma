@@ -293,6 +293,8 @@ model Job {
   type          String
   payload       Json      @db.JsonB
   status        JobStatus @default(pending)
+  priority      Int       @default(0)
+  payloadHash   String?   @map("payload_hash") @db.VarChar(64)
   attempts      Int       @default(0)
   maxAttempts   Int       @default(3) @map("max_attempts")
   lastError     String?   @map("last_error") @db.Text
@@ -302,6 +304,8 @@ model Job {
   completedAt   DateTime? @map("completed_at")
 
   @@index([status, retryAfter])
+  @@index([status, priority, enqueuedAt])
+  @@index([payloadHash, status])
   @@map("jobs")
 }
 

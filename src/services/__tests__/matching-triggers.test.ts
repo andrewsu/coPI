@@ -230,16 +230,22 @@ describe("triggerScheduledMatchingRun", () => {
 
     expect(count).toBe(2);
     expect(mockComputeEligiblePairs).toHaveBeenCalledWith(mockPrisma);
-    expect(mockEnqueue).toHaveBeenCalledWith({
-      type: "run_matching",
-      researcherAId: "aaa",
-      researcherBId: "bbb",
-    });
-    expect(mockEnqueue).toHaveBeenCalledWith({
-      type: "run_matching",
-      researcherAId: "ccc",
-      researcherBId: "ddd",
-    });
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      {
+        type: "run_matching",
+        researcherAId: "aaa",
+        researcherBId: "bbb",
+      },
+      { priority: -10 },
+    );
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      {
+        type: "run_matching",
+        researcherAId: "ccc",
+        researcherBId: "ddd",
+      },
+      { priority: -10 },
+    );
   });
 
   it("returns 0 when no eligible pairs exist", async () => {
