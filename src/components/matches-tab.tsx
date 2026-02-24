@@ -265,18 +265,20 @@ function MatchCard({
       )}
 
       <div className="p-5">
+        {/* Proposal title */}
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+          {proposal.title}
+        </h3>
+
         {/* Collaborator info */}
-        <div className="mb-3">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {collaborator.name}
-          </h3>
-          <p className="text-sm text-gray-500">
-            {collaborator.institution}
-            {collaborator.department && (
-              <span> &middot; {collaborator.department}</span>
-            )}
-          </p>
-        </div>
+        <p className="text-sm text-gray-500 mb-3">
+          {collaborator.name}
+          {" \u2014 "}
+          {collaborator.institution}
+          {collaborator.department && (
+            <span> &middot; {collaborator.department}</span>
+          )}
+        </p>
 
         {/* Contact info — per email_visibility setting */}
         {!isDeletedAccount && (
@@ -299,22 +301,11 @@ function MatchCard({
           </div>
         )}
 
-        {/* Proposal summary */}
-        <div className="mb-3">
+        {/* Collaboration type and confidence tier */}
+        <div className="flex items-center justify-between mb-3">
           <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
             {proposal.collaborationType}
           </span>
-        </div>
-
-        <p className="text-sm text-gray-800 leading-relaxed mb-4">
-          {proposal.oneLineSummary}
-        </p>
-
-        {/* Confidence tier and title */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-xs text-gray-400 truncate max-w-[70%]">
-            {proposal.title}
-          </p>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span
               className={`inline-block h-2 w-2 rounded-full ${tierStyle.dotClass}`}
@@ -323,6 +314,10 @@ function MatchCard({
             <span className="text-xs text-gray-400">{tierStyle.label}</span>
           </div>
         </div>
+
+        <p className="text-sm text-gray-800 leading-relaxed mb-4">
+          {proposal.oneLineSummary}
+        </p>
 
         {/* See details / Hide details button */}
         <button

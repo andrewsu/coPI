@@ -455,36 +455,26 @@ export function ProposalSummaryCard({
       )}
 
       <div className="p-5">
-        {/* Collaborator info */}
-        <div className="mb-3">
-          <h3 className="text-lg font-semibold text-gray-900">
-            {proposal.collaborator.name}
-          </h3>
-          <p className="text-sm text-gray-500">
-            {proposal.collaborator.institution}
-            {proposal.collaborator.department && (
-              <span> &middot; {proposal.collaborator.department}</span>
-            )}
-          </p>
-        </div>
+        {/* Proposal title */}
+        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+          {proposal.title}
+        </h3>
 
-        {/* Collaboration type */}
-        <div className="mb-3">
+        {/* Collaborator info */}
+        <p className="text-sm text-gray-500 mb-3">
+          {proposal.collaborator.name}
+          {" \u2014 "}
+          {proposal.collaborator.institution}
+          {proposal.collaborator.department && (
+            <span> &middot; {proposal.collaborator.department}</span>
+          )}
+        </p>
+
+        {/* Collaboration type and confidence tier */}
+        <div className="flex items-center justify-between mb-3">
           <span className="inline-block rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700">
             {proposal.collaborationType}
           </span>
-        </div>
-
-        {/* One-line summary — the core of the card */}
-        <p className="text-sm text-gray-800 leading-relaxed mb-4">
-          {proposal.oneLineSummary}
-        </p>
-
-        {/* Confidence tier indicator and title */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-xs text-gray-400 truncate max-w-[70%]">
-            {proposal.title}
-          </p>
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span
               className={`inline-block h-2 w-2 rounded-full ${tierStyle.dotClass}`}
@@ -493,6 +483,11 @@ export function ProposalSummaryCard({
             <span className="text-xs text-gray-400">{tierStyle.label}</span>
           </div>
         </div>
+
+        {/* One-line summary — the core of the card */}
+        <p className="text-sm text-gray-800 leading-relaxed mb-4">
+          {proposal.oneLineSummary}
+        </p>
 
         {/* See details / Hide details button */}
         <button
