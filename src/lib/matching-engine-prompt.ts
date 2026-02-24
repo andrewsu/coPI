@@ -124,7 +124,7 @@ const REQUIRED_STRING_FIELDS: (keyof ProposalOutput)[] = [
 export const MATCHING_MODEL_CONFIG = {
   model: "claude-opus-4-20250514",
   maxTokens: 4096,
-  temperature: 0.5,
+  temperature: 0.3,
 } as const;
 
 // --- System prompt ---
@@ -137,9 +137,9 @@ const SYSTEM_PROMPT = `You are a scientific collaboration proposal engine for a 
 2. Each lab must bring something the other doesn't have.
 3. Each lab must benefit non-generically.
 4. A concrete first experiment is REQUIRED, scoped to days-to-weeks of effort.
-5. Return an empty array [] if no quality proposal exists — silence is better than noise.
+5. Return an empty array [] if no quality proposal exists — silence is better than noise. Most researcher pairs will NOT warrant a proposal. A well-calibrated matching engine returns proposals for roughly 10–30% of pairs evaluated. If you find yourself generating proposals for every pair, you are not being selective enough.
 6. If existing proposals are provided, propose something DISTINCT or return nothing.
-7. Maximum 3 proposals per pair per call.
+7. Maximum 3 proposals per pair per call — but 0 or 1 is the most common correct answer. Do not stretch to fill a quota.
 8. Do NOT quote or directly reference user-submitted text — frame proposals using publicly available information even if user-submitted text informed the match.
 
 ## Anti-Genericity Rules (CRITICAL)
@@ -148,6 +148,15 @@ const SYSTEM_PROMPT = `You are a scientific collaboration proposal engine for a 
 - Each lab's contribution must reference specific techniques, models, reagents, or expertise from their profile. Saying "Lab A's expertise in X" is not sufficient — say what specifically they would do and with what.
 - The proposed first experiment must name specific assays, specific computational methods, specific reagents, or specific datasets. "We would analyze the data" is not a first experiment.
 - If you cannot articulate what makes this collaboration better than either lab hiring a postdoc to do the other's part, do not generate the proposal.
+
+## Self-Check Gate (apply to EVERY proposal before including it)
+
+Before outputting each proposal, verify ALL of the following. If any check fails, discard the proposal:
+
+1. Could either lab's contribution be performed by hiring any competent postdoc in that field? → If yes, the proposal lacks true synergy. Discard.
+2. Does the first experiment name specific assays, methods, reagents, or datasets? → If not, the proposal is too vague. Discard.
+3. Is this proposal anchored to a specific finding, dataset, reagent, or model system unique to these two labs? → If not, the proposal is generic. Discard.
+4. Would a PI reading this proposal immediately understand why THESE two labs (and not any two labs in related fields) should collaborate? → If not, discard.
 
 ## Output Schema
 
@@ -238,6 +247,14 @@ Return an empty array [] if no quality proposals exist for this pair.
   "confidence_tier": "high",
   "reasoning": "Strong match: (1) Specific phenotype needing structural characterization, not generic overlap. (2) Grotjahn has the exact technical capability and quantification pipeline. (3) Self-contained first experiment — treated vs untreated cells, clear readout. (4) Both labs benefit non-generically. (5) Low-medium investment. (6) Clear path to paper and R01."
 }
+
+### Good Example 4: No Proposal — Shared Disease Area but No Complementarity
+
+Pair: A neuroscientist studying Parkinson's disease using mouse behavioral models and optogenetics, and a neuroscientist studying Parkinson's disease using human iPSC-derived dopaminergic neurons and single-cell transcriptomics.
+
+[]
+
+Reasoning (not included in output, shown here for illustration): Both labs study Parkinson's disease, but they do not bring complementary capabilities that require collaboration. Lab A's behavioral assays could apply to any dopaminergic model, not specifically to Lab B's iPSC system. Lab B's iPSC neurons could be tested in any behavioral paradigm, not specifically Lab A's. Neither lab has a specific reagent, dataset, or finding that the other lab uniquely needs. The overlap is topical (same disease) rather than synergistic (complementary tools answering a shared question). A collaboration here would amount to "we both study PD, let's combine efforts" — which fails the postdoc test. Correct output: empty array.
 
 ### Bad Example 1: One Side is Generic Service Work
 
@@ -400,7 +417,7 @@ export function buildMatchingUserMessage(input: MatchingInput): string {
   const sections: string[] = [];
 
   sections.push(
-    "Analyze the following pair of researchers and propose up to 3 specific, synergistic collaboration proposals. Return a JSON array following the schema in your instructions. Return an empty array [] if no quality proposals exist.",
+    "Evaluate whether any specific, synergistic collaboration proposals exist for the following pair of researchers. Only output proposals that clear a high quality bar — most pairs should receive zero proposals. If strong proposals exist, return at most 3. Return a JSON array following the schema in your instructions, or an empty array [] if no proposals meet the bar.",
   );
   sections.push("");
 
