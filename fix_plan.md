@@ -125,6 +125,21 @@
 - [x] Implement admin API routes (`/api/admin/users`, `/api/admin/proposals`, `/api/admin/stats`)
 - [x] Add CLI commands for granting/revoking admin (`npm run admin:grant`, `npm run admin:revoke`)
 
+## Phase 11: Web Analytics (Umami)
+
+See `specs/analytics.md` for full specification.
+
+- [ ] Create `scripts/init-umami-db.sh` to create the `umami` database on Postgres init
+- [ ] Add Umami service to `docker-compose.prod.yml` (image, env, depends_on, logging)
+- [ ] Mount the init script into the Postgres service at `/docker-entrypoint-initdb.d/`
+- [ ] Add Nginx proxy location (`/u/` → `umami:3001`) to `nginx/nginx.conf`
+- [ ] Add `UMAMI_APP_SECRET` and `NEXT_PUBLIC_UMAMI_WEBSITE_ID` to `.env.example`
+- [ ] Add Umami tracking `<Script>` to `src/app/layout.tsx`
+- [ ] Create `src/lib/analytics.ts` with `trackEvent()` helper
+- [ ] Add custom event tracking to swipe actions (`swipe-interested`, `swipe-archive`, `expand-proposal`)
+- [ ] Add custom event tracking to match view, profile edit, match pool add, survey submit
+- [ ] Update `specs/tech-stack.md` to document Umami under Monitoring section
+
 ## Notes
 
 - Phases can overlap. Phase 1-2 are prerequisites for everything else.
