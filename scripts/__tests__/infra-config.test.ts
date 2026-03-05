@@ -81,6 +81,14 @@ describe("nginx configuration", () => {
     expect(nginxConf).toContain("Upgrade");
     expect(nginxConf).toMatch(/proxy_set_header\s+Connection\s+"upgrade"/);
   });
+
+  it("proxies /u/ to umami:3001 for ad-blocker-resistant analytics", () => {
+    // The /u/ location block proxies Umami's tracking script and event
+    // collection endpoint through the main domain so they appear first-party
+    // to browsers and are not blocked by ad-blocker lists.
+    expect(nginxConf).toContain("location /u/");
+    expect(nginxConf).toContain("proxy_pass http://umami:3001/");
+  });
 });
 
 describe("docker-compose.prod.yml", () => {
@@ -89,7 +97,7 @@ describe("docker-compose.prod.yml", () => {
     "utf-8"
   );
 
-  it("defines all six required services", () => {
+  it("defines all seven required services", () => {
     // Each service must appear as a top-level key under 'services:'
     for (const service of [
       "postgres:",
@@ -98,6 +106,7 @@ describe("docker-compose.prod.yml", () => {
       "worker:",
       "nginx:",
       "certbot:",
+      "umami:",
     ]) {
       expect(compose).toContain(service);
     }
@@ -177,7 +186,7 @@ describe("docker-compose.prod.yml", () => {
     // to send container logs to AWS CloudWatch Logs for centralized
     // monitoring on the pilot EC2 deployment.
 
-    const services = ["postgres", "migrate", "app", "worker", "nginx", "certbot"];
+    const services = ["postgres", "migrate", "app", "worker", "nginx", "certbot", "umami"];
 
     it("configures the awslogs logging driver on all services", () => {
       for (const service of services) {
@@ -221,6 +230,99 @@ describe("docker-compose.prod.yml", () => {
       expect(compose).toContain("logs:CreateLogStream");
       expect(compose).toContain("logs:PutLogEvents");
     });
+  });
+});
+
+describe("umami service in docker-compose.prod.yml", () => {
+  // Validates that the Umami analytics service is correctly configured.
+  // Umami provides self-hosted, privacy-friendly web analytics that shares
+  // the existing Postgres instance via a dedicated 'umami' database.
+
+  const compose = fs.readFileSync(
+    path.join(ROOT, "docker-compose.prod.yml"),
+    "utf-8"
+  );
+
+  // Extract just the umami service section for targeted assertions
+  const sections = compose.split(/\n  \w[\w-]*:/);
+  const umamiSection = sections.find((s) =>
+    s.includes("ghcr.io/umami-software/umami")
+  );
+
+  it("uses the official Umami PostgreSQL Docker image", () => {
+    expect(compose).toContain("ghcr.io/umami-software/umami:postgresql-latest");
+  });
+
+  it("connects to the dedicated umami database on the shared Postgres instance", () => {
+    // The DATABASE_URL must point to the 'umami' database (not the app's 'copi' database)
+    // so that Umami's own schema migrations don't pollute the application database.
+    expect(umamiSection).toBeDefined();
+    expect(umamiSection).toMatch(/DATABASE_URL.*postgres.*\/umami/);
+  });
+
+  it("requires UMAMI_APP_SECRET to be set", () => {
+    // APP_SECRET is required for Umami session encryption.
+    // The :? syntax causes docker-compose to fail fast if the variable is unset.
+    expect(umamiSection).toMatch(/APP_SECRET.*UMAMI_APP_SECRET.*\?/);
+  });
+
+  it("renames tracker script to app.js to avoid ad-blocker detection", () => {
+    // TRACKER_SCRIPT_NAME renames Umami's default 'script.js' to 'app.js'
+    // so it does not match common ad-blocker filter lists.
+    expect(umamiSection).toContain("TRACKER_SCRIPT_NAME: app.js");
+  });
+
+  it("renames collection endpoint to /api/t to avoid ad-blocker detection", () => {
+    // COLLECT_API_ENDPOINT renames the default '/api/send' endpoint to '/api/t'
+    // to reduce the chance of ad-blocker interception.
+    expect(umamiSection).toContain("COLLECT_API_ENDPOINT: /api/t");
+  });
+
+  it("depends on postgres being healthy before starting", () => {
+    expect(umamiSection).toContain("service_healthy");
+  });
+
+  it("uses expose (internal) instead of ports (external)", () => {
+    // Umami must not expose port 3001 to the host; only Nginx can reach it.
+    expect(umamiSection).toContain("expose:");
+    expect(umamiSection).not.toMatch(/^\s{4}ports:/m);
+  });
+
+  it("mounts Postgres init script to create the umami database on first boot", () => {
+    // The init script runs once when the Postgres data directory is first created.
+    // It creates the 'umami' database so Umami can connect on startup.
+    expect(compose).toContain(
+      "./scripts/init-umami-db.sh:/docker-entrypoint-initdb.d/init-umami-db.sh:ro"
+    );
+  });
+});
+
+describe("init-umami-db.sh", () => {
+  // Validates that the Postgres initialization script for Umami is correct.
+  // This script is executed once on initial volume creation to create the
+  // dedicated 'umami' database that the Umami service will use.
+
+  const script = fs.readFileSync(
+    path.join(ROOT, "scripts/init-umami-db.sh"),
+    "utf-8"
+  );
+
+  it("starts with a bash shebang", () => {
+    expect(script.startsWith("#!/bin/bash")).toBe(true);
+  });
+
+  it("creates the umami database", () => {
+    expect(script).toContain("CREATE DATABASE umami");
+  });
+
+  it("uses POSTGRES_USER variable for authentication", () => {
+    expect(script).toContain("$POSTGRES_USER");
+  });
+
+  it("is executable", () => {
+    const stats = fs.statSync(path.join(ROOT, "scripts/init-umami-db.sh"));
+    const isExecutable = (stats.mode & 0o111) !== 0;
+    expect(isExecutable).toBe(true);
   });
 });
 
@@ -301,5 +403,17 @@ describe(".env.example", () => {
     // Docker logging driver — the .env.example should mention both
     expect(envExample).toContain("AWS_REGION=");
     expect(envExample).toMatch(/CloudWatch|awslogs/i);
+  });
+
+  it("documents UMAMI_APP_SECRET for Umami session encryption", () => {
+    // UMAMI_APP_SECRET is required by the Umami service in docker-compose.prod.yml.
+    // It must be set to a random secret before deploying.
+    expect(envExample).toContain("UMAMI_APP_SECRET=");
+  });
+
+  it("documents NEXT_PUBLIC_UMAMI_WEBSITE_ID for frontend tracking", () => {
+    // NEXT_PUBLIC_UMAMI_WEBSITE_ID is obtained from the Umami admin UI after
+    // first deploy. It is embedded in page HTML (not sensitive).
+    expect(envExample).toContain("NEXT_PUBLIC_UMAMI_WEBSITE_ID=");
   });
 });

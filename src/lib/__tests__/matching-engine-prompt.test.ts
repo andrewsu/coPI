@@ -181,7 +181,7 @@ describe("matching-engine-prompt", () => {
     it("specifies Claude Opus with matching-appropriate parameters", () => {
       expect(MATCHING_MODEL_CONFIG.model).toMatch(/^claude-opus/);
       expect(MATCHING_MODEL_CONFIG.maxTokens).toBe(4096);
-      expect(MATCHING_MODEL_CONFIG.temperature).toBe(0.5);
+      expect(MATCHING_MODEL_CONFIG.temperature).toBe(0.3);
     });
   });
 

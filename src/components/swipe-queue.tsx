@@ -462,7 +462,7 @@ export function ProposalSummaryCard({
 
         {/* Collaborator info */}
         <p className="text-sm text-gray-500 mb-3">
-          {proposal.collaborator.name}
+          <span>{proposal.collaborator.name}</span>
           {" \u2014 "}
           {proposal.collaborator.institution}
           {proposal.collaborator.department && (

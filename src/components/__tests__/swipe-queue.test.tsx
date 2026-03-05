@@ -573,8 +573,10 @@ describe("SwipeQueue", () => {
     await waitFor(() => {
       expect(screen.getByText("Dr. Bob")).toBeInTheDocument();
     });
-    // Should show institution without the separator dot
-    expect(screen.getByText("MIT")).toBeInTheDocument();
+    // Should show institution without the separator dot.
+    // Institution is a text node alongside the name — match by regex
+    // since no single element wraps just the institution text.
+    expect(screen.getByText(/MIT/)).toBeInTheDocument();
   });
 
   it("renders proposal title in the card", async () => {

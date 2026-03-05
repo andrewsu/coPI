@@ -8,6 +8,7 @@
 #   - worker:    Background job processor
 #   - nginx:     Reverse proxy with HTTPS termination
 #   - certbot:   Let's Encrypt certificate renewal
+#   - umami:     Self-hosted web analytics (proxied at /u/)
 #
 # First-time setup:
 #   1. Create .env with all required variables (see .env.example)
@@ -63,6 +64,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-copi}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Create the umami database on first boot (init scripts run once on empty volume)
+      - ./scripts/init-umami-db.sh:/docker-entrypoint-initdb.d/init-umami-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-copi}"]
       interval: 10s
@@ -230,6 +233,44 @@ services:
       options:
         awslogs-group: /copi/certbot
         tag: certbot
+        awslogs-create-group: "true"
+        awslogs-region: ${AWS_REGION:-us-east-2}
+
+  # -----------------------------------------------------------
+  # Umami analytics — self-hosted, privacy-friendly web analytics
+  #
+  # Shares the PostgreSQL instance via a dedicated 'umami' database
+  # (created by scripts/init-umami-db.sh on first Postgres boot).
+  # Umami auto-creates its own schema tables on first startup.
+  # Proxied through Nginx at /u/ so tracking requests appear
+  # first-party and are not blocked by ad blockers.
+  #
+  # First-time setup after deploy:
+  #   1. Go to https://<DOMAIN>/u/  (default: admin / umami)
+  #   2. Change the admin password immediately
+  #   3. Add copi.science as a website — copy the Website ID
+  #   4. Set NEXT_PUBLIC_UMAMI_WEBSITE_ID in .env and redeploy app
+  # -----------------------------------------------------------
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-copi}:${POSTGRES_PASSWORD}@postgres:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET:?Set UMAMI_APP_SECRET in .env}
+      # Rename script and collection endpoint from default names to avoid ad-blocker block lists
+      TRACKER_SCRIPT_NAME: app.js
+      COLLECT_API_ENDPOINT: /api/t
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Internal only — Nginx proxies /u/ to this port
+    expose:
+      - "3001"
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: /copi/umami
+        tag: umami
         awslogs-create-group: "true"
         awslogs-region: ${AWS_REGION:-us-east-2}
 

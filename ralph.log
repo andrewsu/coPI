@@ -1,1 +1,462 @@
 === Iteration 1 === Sun Feb 22 15:14:30 PST 2026
+## Summary
+
+Implemented three Phase 6 items in one cohesive unit:
+
+**1. "Interested" swipe action with match detection** — `POST /api/proposals/[id]/swipe` endpoint creates Swipe records, detects mutual matches (creates Match when both users swipe interested), and returns match status.
+
+**2. "Archive" swipe action** — Same endpoint handles archive direction with no visibility changes per spec.
+
+**3. Visibility state transitions** — When a user swipes "interested", the other user's `pending_other_interest` visibility is flipped to `visible`, making the proposal appear in their queue.
+
+**4. Swipe analytics tracking** — `viewedDetail` (tracked per card when user expands details) and `timeSpentMs` (computed from card display time) are sent with each swipe.
+
+**UI changes:**
+- Replaced Previous/Next navigation with Interested (green) and Archive (gray) buttons
+- Match banner appears briefly on mutual interest
+- Three distinct empty states: "Add colleagues", "Generating proposals", "All caught up"
+
+**Tests:** 19 new API tests + updated 38 component tests. All 749 tests pass across 38 suites. TypeScript compilation clean.
+
+=== Iteration 2 === Sun Feb 22 15:26:13 PST 2026
+## Summary
+
+**Completed: Build archive tab (view archived proposals, move back to interested)**
+
+### What was built:
+
+**API endpoints:**
+- `GET /api/proposals/archived` — Fetches the user's archived proposals by querying Swipe records with `direction: "archive"`, sorted by most recently archived first. Returns the same user-perspective shape as the swipe queue (oneLineSummary mapped by side, collaborator info) plus an `archivedAt` timestamp.
+- `POST /api/proposals/[id]/unarchive` — Moves an archived proposal back to "Interested". Updates the swipe direction, then runs the same match-check and visibility-flip logic as the initial interested swipe endpoint.
+
+**UI components:**
+- `ProposalTabs` — Client component with Queue/Archive tab navigation, replaces direct `SwipeQueue` rendering on the home page.
+- `ArchiveTab` — Displays archived proposals as a scrollable list, reuses `ProposalSummaryCard` and `ProposalDetailView` from the swipe queue, provides a "Move to Interested" button per card. Empty state: "No archived proposals yet." Shows match banner on mutual interest from unarchive.
+
+**Tests:** 21 new tests (9 for archived endpoint, 12 for unarchive endpoint) — all pass. Full suite: 770 tests across 40 suites, all green. TypeScript clean.
+
+=== Iteration 3 === Sun Feb 22 15:34:30 PST 2026
+## Summary
+
+Implemented the **Matches Tab** (Phase 6) — the culmination of the swipe flow where users see their mutual matches.
+
+### What was built:
+
+1. **`GET /api/proposals/matches`** — API endpoint that fetches all mutual matches for the authenticated user. Each match includes:
+   - Full proposal detail mapped to the user's perspective (contributions, benefits, etc.)
+   - Both researchers' public profiles (research summary, techniques, models, disease areas, key targets, grants, publications)
+   - Contact information governed by `emailVisibility` setting: `public_profile`/`mutual_matches` shows email, `never` shows a placeholder message
+   - Anchoring publications resolved from UUIDs to actual records
+   - Handles deleted accounts (null profile, name/institution preserved)
+   - Excludes `userSubmittedTexts` and `keywords` per spec
+
+2. **`MatchesTab` component** (`src/components/matches-tab.tsx`) — Client component displaying matches as a scrollable list with:
+   - Mutual match banner with date
+   - Contact info callout with "Reach out to [name]" prompt and email/placeholder
+   - Proposal summary card with confidence tier
+   - Expandable full detail view (inline — all data from API, no separate fetch)
+   - Both researchers' profiles with tags, grants, and publications
+   - Empty state: "No matches yet. Keep reviewing proposals!"
+
+3. **Updated `ProposalTabs`** — Now has three tabs: Queue, Archive, Matches
+
+4. **17 passing tests** covering auth, perspective mapping, all three `emailVisibility` modes, deleted accounts, anchoring publication resolution, ordering, and response shape
+
+All 787 tests pass. TypeScript compiles cleanly.
+
+=== Iteration 4 === Sun Feb 22 15:42:43 PST 2026
+## Summary
+
+Completed **Phase 8: Build settings page (email visibility, incoming proposals toggle, notification prefs)**.
+
+### What was built:
+
+1. **`GET/PUT /api/settings`** — API route that fetches and updates user settings with partial update support. Validates emailVisibility enum values and boolean field types. Returns 422 for invalid input.
+
+2. **`/settings` page** — Client component with four sections:
+   - **Email Visibility** — Radio button group (public_profile, mutual_matches, never) with descriptions
+   - **Allow Incoming Proposals** — Toggle switch with explanation text
+   - **Email Notifications** — Master switch that dims 3 sub-toggles when off (match notifications, new proposals digest, profile refresh notifications)
+   - **Profile & Data** — Links to submitted texts management and profile edit/refresh pages
+
+3. **Confirmation modal** — Per spec, disabling match notifications shows: "Are you sure? You won't be notified when someone wants to collaborate with you."
+
+4. **Navigation** — Settings link added to home page header
+
+5. **Tests** — 17 API tests + 13 page component tests (all 817 tests pass, TypeScript clean)
+
+=== Iteration 5 === Sun Feb 22 15:51:39 PST 2026
+API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"},"request_id":"req_011CYQ1N57ogFZ1db259NCit"}
+
+=== Iteration 6 === Sun Feb 22 15:53:32 PST 2026
+## Summary
+
+**Completed: Match pool cap logic (200 cap, priority ordering)** — Phase 4 item.
+
+### What was implemented:
+
+1. **Per-user match pool cap enforcement** in `computeEligiblePairs()` (`src/services/eligible-pairs.ts`):
+   - Priority 1: `individual_select` entries are **always included** regardless of cap
+   - Priority 2: `affiliation_select` and `all_users` entries are randomly sampled to fill remaining slots up to the 200 cap
+   - Sampling uses a deterministic seeded PRNG (djb2 hash + xorshift32 Fisher-Yates shuffle) for reproducibility
+   - Weekly rotation via ISO week-based seed (`2026-W08`) so different affiliation entries are sampled each week
+
+2. **Exported utilities**: `MATCH_POOL_CAP`, `capEntriesForUser()`, `seededSample()`, `getWeekSeed()`, `PoolEntry` type
+
+3. **Options**: `disableCap`, `cap` (override), `cycleSeed` (for deterministic testing) added to `EligiblePairOptions`
+
+4. **API route update**: `src/app/api/match-pool/route.ts` now imports `MATCH_POOL_CAP` from the service instead of defining its own constant
+
+5. **19 new tests** covering cap enforcement, priority ordering, seed determinism, rotation across cycles, per-user independence, and the `seededSample` and `capEntriesForUser` helper functions
+
+### Test results: 836 tests pass, 43 suites, 0 failures. TypeScript compiles cleanly.
+
+=== Iteration 7 === Sun Feb 22 16:08:32 PST 2026
+You've hit your limit · resets 5pm (America/Los_Angeles)
+
+=== Iteration 8 === Sun Feb 22 16:12:34 PST 2026
+You've hit your limit · resets 5pm (America/Los_Angeles)
+
+=== Iteration 9 === Sun Feb 22 16:12:36 PST 2026
+You've hit your limit · resets 5pm (America/Los_Angeles)
+
+=== Iteration 10 === Sun Feb 22 16:12:38 PST 2026
+You've hit your limit · resets 5pm (America/Los_Angeles)
+
+=== Iteration 1 === Sun Feb 22 17:08:24 PST 2026
+=== Iteration 1 === Sun Feb 22 17:17:42 PST 2026
+## Summary
+
+Implemented the **periodic survey for proposal quality feedback** (Phase 6), completing Phase 6 entirely.
+
+**What was built:**
+
+1. **`POST /api/survey`** — API endpoint that stores `SurveyResponse` records with validated failure modes (7 predefined options) and optional free text (max 1000 chars). 12 tests.
+
+2. **`SurveyModal` component** (`src/components/survey-modal.tsx`) — Modal dialog with multi-select checkboxes for all 7 failure modes per spec. Selecting "Other" reveals a free-text textarea. Users can submit or skip. 13 tests.
+
+3. **Survey trigger in swipe endpoint** — Modified `POST /api/proposals/[id]/swipe` to count the user's total archive swipes after each archive action. Returns `showSurvey: true` when the count is a multiple of `SURVEY_INTERVAL` (default 5). 4 new tests.
+
+4. **Integration in SwipeQueue** — The `SwipeQueue` component checks `showSurvey` in the swipe response and renders the `SurveyModal` overlay when triggered.
+
+5. Also marked **"Implement empty states for all tabs"** as complete — all 6 spec-defined empty states were already implemented (5 in UI components, 1 via routing redirect).
+
+**All 883 tests pass. No TypeScript errors. Committed and pushed as `b95bb49`.**
+
+=== Iteration 2 === Sun Feb 22 17:27:05 PST 2026
+## Summary
+
+**Completed: Phase 7 — Set up AWS SES email sending**
+
+This was the most important unfinished item as it unblocks all notification features. Here's what was implemented:
+
+**New files:**
+- `src/lib/ses.ts` — SES client singleton following the same global pattern as Prisma and Anthropic clients
+- `src/services/email-service.ts` — Full email service with HTML template rendering for all 4 notification types:
+  - `match_notification` — mutual match alert with contact info (respects emailVisibility)
+  - `new_proposals_digest` — weekly batch summary with top proposal preview
+  - `profile_refresh_candidate` — new publications found, profile update suggestion
+  - `unclaimed_profile_recruitment` — invitation for seeded researchers to claim profiles
+- `src/services/__tests__/email-service.test.ts` — 42 tests covering all templates, XSS escaping, SES sending, dev-mode logging, and error propagation
+
+**Modified files:**
+- `src/worker/handlers.ts` — Replaced placeholder `send_email` handler with real implementation that calls `sendTemplatedEmail()`
+- `src/worker/__tests__/handlers.test.ts` — Added email service mocks and 3 new handler tests
+- `package.json` — Added `@aws-sdk/client-ses` dependency
+- `fix_plan.md` — Marked item complete
+- `AGENT.md` — Documented email service architecture (item 42)
+
+**Key design decisions:**
+- Dev-mode fallback: logs emails to console when AWS credentials are absent (no setup needed for local dev)
+- HTML emails use inline styles per spec ("no template engine needed")
+- All user-provided data is HTML-escaped to prevent XSS
+- SES client is injected into service functions for testability
+- Errors propagate to the job queue for retry with exponential backoff
+
+**Test results:** All 927 tests passing, clean TypeScript type-check.
+
+=== Iteration 3 === Sun Feb 22 17:35:50 PST 2026
+## Summary
+
+Implemented **match notification email (immediate)** from Phase 7 of the fix plan.
+
+**What was done:**
+
+1. **Created `src/services/match-notifications.ts`** — A service that sends immediate email notifications to both users when a mutual match is created. It:
+   - Fetches both researchers' data (name, email, institution, department, notification preferences) in one query
+   - Checks `emailNotificationsEnabled` (master switch) AND `notifyMatches` (per-type toggle) for each user
+   - Skips placeholder ORCID emails (`@orcid.placeholder`)
+   - Provides each user their perspective-specific one-line summary (`oneLineSummaryA` vs `oneLineSummaryB`)
+   - Respects the OTHER user's `emailVisibility` setting for contact info inclusion
+   - Updates `notificationSentA`/`notificationSentB` flags on the Match record
+   - Enqueues `send_email` jobs via the existing job queue infrastructure
+
+2. **Integrated into swipe endpoint** (`POST /api/proposals/[id]/swipe`) — fire-and-forget call after match creation
+
+3. **Integrated into unarchive endpoint** (`POST /api/proposals/[id]/unarchive`) — fire-and-forget call after match creation
+
+4. **Tests:** 12 new service tests + 3 new swipe endpoint tests + 2 new unarchive endpoint tests. All 944 tests pass across the full suite.
+
+=== Iteration 4 === Sun Feb 22 17:44:07 PST 2026
+## Summary
+
+**Completed:** Phase 7 — Implement new proposals digest email (weekly batch)
+
+**What was implemented:**
+
+1. **Schema migration** — Added `lastDigestSentAt` (nullable DateTime) field to the User model to track when each user last received a digest email, enabling the weekly frequency cap.
+
+2. **`src/services/proposals-digest.ts`** — The weekly digest service with:
+   - `runWeeklyDigest(prisma, options?)` — Processes all eligible users, queries for new unswiped visible proposals since their last digest, selects the highest-confidence proposal for the email preview, enqueues `send_email` jobs with the `new_proposals_digest` template, and updates `lastDigestSentAt`
+   - Respects `emailNotificationsEnabled` (master switch) + `notifyNewProposals` (per-type toggle)
+   - Excludes placeholder ORCID emails at the query level
+   - Enforces 7-day minimum interval between digests via `DIGEST_INTERVAL_MS`
+   - Error isolation: failures on one user don't block processing of others
+   - Returns `WeeklyDigestResult` with `emailsSent`, `usersSkipped`, and `errors`
+
+3. **`src/services/__tests__/proposals-digest.test.ts`** — 16 tests covering: email enqueuing, correct one-line summary by user side, lastDigestSentAt updates, skipping users with no proposals, multi-user processing, confidence tier ordering, tie-breaking by recency, query filters for visibility/swipes/preferences/placeholders, error resilience, and interval enforcement.
+
+**All 960 tests pass** (50 test suites, 0 failures).
+
+=== Iteration 5 === Sun Feb 22 17:51:22 PST 2026
+## Summary
+
+Implemented **account deletion with proposal preservation logic** (Phase 8) — the most important unfinished item in fix_plan.md.
+
+### What was built:
+
+1. **Schema migration**: Added `deletedAt` DateTime? field to User model
+
+2. **Account deletion service** (`src/services/account-deletion.ts`): Runs in a single database transaction with soft-delete approach:
+   - Preserves proposals where the other party swiped "interested" (sets deleted user's visibility to "hidden")
+   - Deletes proposals where no other-party interest exists
+   - Removes all personal data: profile, publications, swipes, match pool entries, affiliation selections, survey responses, matching results
+   - Anonymizes User record (email/orcid randomized, department cleared, notifications disabled, `deletedAt` set)
+   - Name and institution retained for display on preserved proposals
+
+3. **API endpoint** (`DELETE /api/account`): Requires `{ confirm: true }` body, returns deletion summary
+
+4. **Settings page UI**: "Delete Account" danger zone section explaining what's deleted/preserved, confirmation modal with "I understand" checkbox, post-deletion signOut redirect
+
+5. **Tests**: 20 new tests (11 service + 9 API) — all pass. Full suite: 981 tests pass.
+
+Also marked two already-implemented items as complete in fix_plan.md: profile refresh notification email, notification preferences in settings.
+
+=== Iteration 6 === Sun Feb 22 18:03:17 PST 2026
+## Summary
+
+**Completed:** Phase 3 — Build side-by-side profile comparison UI for refresh candidates
+
+**What was built:**
+
+1. **`GET /api/profile/pending`** — Returns current profile and pending candidate side-by-side with a `changedFields` array highlighting differences. Returns 404 if no pending profile exists.
+
+2. **`POST /api/profile/pending`** — Accepts two actions:
+   - `accept` — Copies candidate fields to current profile, bumps `profileVersion`, clears `pendingProfile`, triggers matching re-evaluation. Supports optional `fields` overrides for "edit before saving".
+   - `dismiss` — Clears pending profile without applying changes.
+
+3. **`/profile/compare` page** — Responsive two-column comparison UI with:
+   - "Changed" badges on modified sections
+   - Green/red diff highlighting for added/removed array items
+   - Three actions: "Accept as-is", "Edit & Accept" (inline editing with TagInput), "Dismiss Update"
+
+4. **Supporting changes:**
+   - `GET /api/profile` now includes `hasPendingProfile: boolean`
+   - Profile edit page shows amber banner when pending profile exists, linking to `/profile/compare`
+   - Refresh notification email links to `/profile/compare` instead of `/profile/edit`
+
+**Tests:** 22 new tests (13 API + 9 UI), all 1003 tests passing across 54 suites.
+
+=== Iteration 7 === Sun Feb 22 18:16:57 PST 2026
+## Summary
+
+Implemented **unsubscribe link handling** (Phase 7, fix_plan.md line 93) — the most important unfinished item for CAN-SPAM compliance since emails were already being sent without proper unsubscribe support.
+
+### What was built:
+
+1. **`src/lib/unsubscribe-token.ts`** — HMAC-SHA256 signed tokens using `NEXTAUTH_SECRET` (no DB table needed). Encodes userId + notificationType + timestamp. 90-day expiry. Constant-time signature comparison.
+
+2. **`GET /api/email/unsubscribe?token=...`** — Validates token, updates the user's notification preference in the database, redirects to confirmation page. Handles edge cases: missing token, invalid/expired token, deleted user.
+
+3. **`/unsubscribe` page** — Success state shows which notification type was disabled; invalid state explains the link expired. Links to settings for further control. No auth required.
+
+4. **Email template updates** — All 4 templates now render an "Unsubscribe" link in the footer alongside the existing "Manage notification preferences" link.
+
+5. **Service integration** — `match-notifications.ts`, `proposals-digest.ts`, and `monthly-refresh.ts` all generate type-specific unsubscribe tokens when building email data.
+
+6. **Middleware update** — `/unsubscribe` and `/api/email/unsubscribe` excluded from auth since users click from email without being logged in.
+
+7. **Bug fix** — `monthly-refresh.ts` was passing `userId` instead of `recipientName` in the email data; corrected to pass `recipientName: user.name`.
+
+### Tests: 36 new tests (20 + 9 + 7), all 1039 tests pass.
+
+=== Iteration 8 === Sun Feb 22 18:28:10 PST 2026
+## Summary
+
+Implemented **Phase 7: Unclaimed profile recruitment email with rate limiting**.
+
+### What was built:
+
+1. **Database schema** — Added 3 new fields to User model: `claimedAt` (DateTime?, detects unclaimed seeded profiles), `lastRecruitmentEmailSentAt` (DateTime?, rate limiting), `recruitmentEmailCount` (Int, max 3 total emails)
+
+2. **Recruitment email service** (`src/services/recruitment-email.ts`) — `sendRecruitmentEmailIfUnclaimed()` checks if the target user is unclaimed (`claimedAt === null`), enforces rate limiting (max 1/week, max 3 total, respects unsubscribe), extracts topic from proposal title, and enqueues a `send_email` job with the existing `unclaimed_profile_recruitment` template
+
+3. **Auth changes** (`src/lib/auth.ts`) — New OAuth users get `claimedAt` set immediately; seeded profiles get `claimedAt` set when claimed via first ORCID login
+
+4. **Swipe/unarchive integration** — Both endpoints now call `sendRecruitmentEmailIfUnclaimed()` fire-and-forget on "interested" swipes (not archives)
+
+5. **Tests** — 17 unit tests for the recruitment service + 3 integration tests in swipe route + 2 in unarchive route + auth test updates. All 1061 tests pass across 58 suites.
+
+=== Iteration 9 === Sun Feb 22 18:40:03 PST 2026
+## Summary
+
+**Implemented: Phase 8 — Seeded profile pipeline (create user + run pipeline without OAuth)**
+
+### What was built:
+
+1. **`src/services/seed-profile.ts`** — Core service with three exports:
+   - `seedProfile(prisma, llm, orcid, options?)` — Seeds a single researcher: validates ORCID format, checks for duplicates, fetches profile via ORCID public API (no OAuth needed), creates User with `claimedAt=null` and `allowIncomingProposals=true`, runs full profile pipeline, enqueues match pool expansion
+   - `seedProfiles(prisma, llm, orcids, options?)` — Batch seeding with sequential processing (rate limit safe) and per-ORCID error isolation
+   - `flipPendingProposalsOnClaim(prisma, userId)` — Flips `pending_other_interest` proposals to `visible` when a seeded user claims their account
+
+2. **`src/lib/auth.ts`** — Updated the signIn callback to call `flipPendingProposalsOnClaim` as fire-and-forget when a seeded profile is claimed, so proposals generated while the user was unclaimed become visible in their swipe queue
+
+3. **Tests:** 28 new tests in `seed-profile.test.ts` + 2 new tests in `auth.test.ts` (30 new tests total). All 1091 tests pass across 59 suites.
+
+=== Iteration 10 === Sun Feb 22 18:49:10 PST 2026
+## Summary
+
+**Completed: Phase 8 — Build admin CLI for seeding profiles by ORCID ID list**
+
+### What was built
+- **`src/cli/seed-profiles.ts`** — Admin CLI tool for seeding researcher profiles from ORCID IDs
+- **`src/cli/__tests__/seed-profiles.test.ts`** — 25 tests covering all CLI logic
+
+### How it works
+```bash
+npm run seed -- 0000-0002-1234-5678                    # Single ORCID
+npm run seed -- 0000-0002-1234-5678 0000-0003-4567-8901  # Multiple
+npm run seed -- --file researchers.txt                   # From file
+npm run seed -- --file researchers.txt --skip-deep-mining # Faster seeding
+npm run seed -- --dry-run 0000-0002-1234-5678            # Validate only
+```
+
+### Key design decisions
+- **Reuses existing `seedProfiles()` service** — no business logic duplication; CLI handles parsing, progress display, and result formatting
+- **File format**: one ORCID per line, `#` comments and blank lines ignored
+- **Deduplicates** input ORCID IDs automatically
+- **Exit code 1** on pipeline failures for scripting/automation
+- **Helper functions exported** (`parseArgs`, `loadOrcidsFromFile`, `validateOrcids`, `formatResults`) for testability
+
+### Test results
+- All **1116 tests pass** across 60 test suites (including 25 new CLI tests)
+- No TypeScript errors in new files
+
+=== Iteration 1 === Sun Feb 22 20:34:37 PST 2026
+## Summary
+
+Implemented the **user-facing invite template for unclaimed profiles** (Phase 7, the last remaining feature before deployment).
+
+### What was built
+
+When a user swipes "interested" on a proposal involving a seeded-but-unclaimed researcher, they now see a modal with a pre-filled email template they can copy and send to invite that researcher to join CoPI.
+
+### Changes
+
+**API** (2 files):
+- `POST /api/proposals/[id]/swipe` — now returns `invite` data when the other user is unclaimed (`claimedAt === null`) on interested swipes
+- `POST /api/proposals/[id]/unarchive` — same invite data on move-to-interested
+
+**New component** (1 file):
+- `src/components/unclaimed-invite-modal.tsx` — modal showing "[Name] hasn't joined CoPI yet", pre-filled email template (subject + body with collaboration context, one-line summary, claim URL, inviter sign-off), and "Copy to Clipboard" button with visual feedback
+
+**UI integration** (2 files):
+- `SwipeQueue` — shows invite modal after interested swipe on unclaimed profile
+- `ArchiveTab` — shows invite modal after unarchive on unclaimed profile
+
+**Tests** (3 files):
+- 15 new component tests for `UnclaimedInviteModal`
+- 4 new swipe API tests for invite data
+- 2 new unarchive API tests for invite data
+- All **1137 tests pass** across **61 test suites**
+
+=== Iteration 2 === Sun Feb 22 20:46:31 PST 2026
+## Summary
+
+**Completed: Phase 9 — Create Dockerfile for the app**
+
+Created a multi-target Dockerfile supporting both the Next.js app and background worker:
+
+- **`app` target**: Multi-stage build producing a minimal production image using Next.js standalone output (`server.js` + bundled `node_modules` + static assets)
+- **`worker` target**: Includes full source code with `tsx` for TypeScript execution of `src/worker/index.ts`
+- **`.dockerignore`**: Excludes `node_modules`, `.next`, `.git`, `.env*`, `coverage`, logs
+- **`next.config.ts`**: Added `output: "standalone"` for Docker-optimized builds
+
+Also fixed 4 build errors that the standalone build exposed (previously hidden by `next dev`):
+1. Removed invalid `export` on `SURVEY_INTERVAL` and `VALID_FAILURE_MODES` from route files (App Router rejects non-HTTP exports)
+2. Added `<Suspense>` boundary around `useSearchParams()` in match-pool page
+3. Fixed `noUncheckedIndexedAccess` type errors in `unsubscribe-token.ts` and `proposals-digest.ts`
+
+All 1137 tests pass. Committed and pushed as `74c72cd`.
+
+=== Iteration 3 === Sun Feb 22 20:54:32 PST 2026
+## Summary
+
+Implemented **two Phase 9 items** from fix_plan.md:
+
+**1. Production Docker Compose** (`docker-compose.prod.yml`) — Full-stack pilot deployment config with 4 services:
+- **postgres**: PostgreSQL 16 with health check, no external port exposure
+- **migrate**: One-shot `prisma migrate deploy` runner (uses worker image), runs before app/worker start
+- **app**: Next.js standalone server, depends on postgres + migrate
+- **worker**: Background job processor, depends on postgres + migrate
+- `DATABASE_URL` auto-constructed from compose variables to use Docker-internal hostname
+- `POSTGRES_PASSWORD` is required (compose fails without it)
+
+**2. Health check endpoint** (`GET /api/health`) — Returns `{ status, timestamp, checks }`:
+- 200 with `"ok"` when database is reachable
+- 503 with `"degraded"` when database is unreachable
+- Excluded from auth middleware for Docker HEALTHCHECK and load balancer probing
+- 3 tests passing
+
+All 1140 tests pass across 62 test suites. Committed and pushed as `604529d`.
+
+=== Iteration 4 === Sun Feb 22 21:00:30 PST 2026
+## Summary
+
+**Completed: Phase 9 — Configure HTTPS (Let's Encrypt)**
+
+Implemented full HTTPS termination for the production deployment using nginx as a reverse proxy with Let's Encrypt certificate management via certbot.
+
+**What was created:**
+
+1. **`nginx/nginx.conf`** — Nginx server config template using `${DOMAIN}` envsubst variable. Configures:
+   - HTTP→HTTPS redirect on port 80
+   - ACME challenge serving for certbot renewal
+   - HTTPS on port 443 with TLS 1.2+, OCSP stapling, HSTS, security headers
+   - Reverse proxy to the Next.js app with forwarding headers
+   - HTTP/2, WebSocket upgrade support, static asset caching
+
+2. **`scripts/init-letsencrypt.sh`** — First-time certificate provisioning script that creates a temp self-signed cert (so nginx can start), obtains a real Let's Encrypt cert via certbot webroot mode, and reloads nginx. Supports `CERTBOT_STAGING=1` for testing.
+
+3. **Updated `docker-compose.prod.yml`** — Added `nginx` (ports 80/443, depends on app healthy) and `certbot` (auto-renews every 12h) services. Changed app from `ports` to `expose` so only nginx handles external traffic.
+
+4. **`scripts/__tests__/infra-config.test.ts`** — 35 tests validating nginx directives, docker-compose service structure, init script safety, and env documentation.
+
+**All 1175 tests pass across 63 test suites.**
+
+=== Iteration 5 === Sun Feb 22 21:09:57 PST 2026
+## Summary
+
+**Completed: Set up CloudWatch logging** (Phase 9)
+
+**What was done:**
+- Added the `awslogs` Docker logging driver to all 6 services in `docker-compose.prod.yml` (postgres, migrate, app, worker, nginx, certbot)
+- Each service gets a dedicated CloudWatch log group under `/copi/<service>` (e.g., `/copi/app`, `/copi/worker`)
+- Configured `awslogs-create-group: "true"` for auto-creation of log groups
+- Uses `${AWS_REGION:-us-east-1}` for the region (same env var as SES)
+- Added documentation header about IAM permissions required (`logs:CreateLogGroup`, `logs:CreateLogStream`, `logs:PutLogEvents`)
+- Updated `.env.example` to document `AWS_REGION` usage for CloudWatch logging
+- Added 7 new tests to `scripts/__tests__/infra-config.test.ts` validating the CloudWatch configuration
+- All 1182 tests pass across 63 test suites
+- Updated fix_plan.md and AGENT.md
+

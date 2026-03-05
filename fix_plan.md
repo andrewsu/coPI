@@ -129,11 +129,11 @@
 
 See `specs/analytics.md` for full specification.
 
-- [ ] Create `scripts/init-umami-db.sh` to create the `umami` database on Postgres init
-- [ ] Add Umami service to `docker-compose.prod.yml` (image, env, depends_on, logging)
-- [ ] Mount the init script into the Postgres service at `/docker-entrypoint-initdb.d/`
-- [ ] Add Nginx proxy location (`/u/` → `umami:3001`) to `nginx/nginx.conf`
-- [ ] Add `UMAMI_APP_SECRET` and `NEXT_PUBLIC_UMAMI_WEBSITE_ID` to `.env.example`
+- [x] Create `scripts/init-umami-db.sh` to create the `umami` database on Postgres init
+- [x] Add Umami service to `docker-compose.prod.yml` (image, env, depends_on, logging)
+- [x] Mount the init script into the Postgres service at `/docker-entrypoint-initdb.d/`
+- [x] Add Nginx proxy location (`/u/` → `umami:3001`) to `nginx/nginx.conf`
+- [x] Add `UMAMI_APP_SECRET` and `NEXT_PUBLIC_UMAMI_WEBSITE_ID` to `.env.example`
 - [ ] Add Umami tracking `<Script>` to `src/app/layout.tsx`
 - [ ] Create `src/lib/analytics.ts` with `trackEvent()` helper
 - [ ] Add custom event tracking to swipe actions (`swipe-interested`, `swipe-archive`, `expand-proposal`)
@@ -142,6 +142,7 @@ See `specs/analytics.md` for full specification.
 
 ## Notes
 
+- ~~`swipe-queue.tsx` rendered `{proposal.collaborator.name}` as a bare text node inside a `<p>`, so `getByText("Dr. Zara Scientist")` in tests could not find an element with that exact text. Also, `MATCHING_MODEL_CONFIG.temperature` was changed to 0.3 (in commit "Tighten proposal generation selectivity") but the test still expected 0.5.~~ — Fixed by wrapping collaborator name in a `<span>` and updating the temperature assertion to 0.3.
 - Phases can overlap. Phase 1-2 are prerequisites for everything else.
 - Phase 3 and 4 can be developed in parallel.
 - Phase 5 depends on Phase 3 (profiles) and Phase 4 (match pools).
