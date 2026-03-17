@@ -258,21 +258,174 @@ Reasoning (not included in output, shown here for illustration): Both labs study
 
 ### Bad Example 1: One Side is Generic Service Work
 
-Rejected: "Su Lab's knowledge graph mining could identify new drug targets for Bhatt Lab's kinase inhibitor program."
-
-Rejection reason: Su Lab's contribution is generic — "knowledge graph mining" could be applied to any drug target program. No specific knowledge graph, dataset, or analytical approach is identified that makes this collaboration better than Bhatt Lab hiring any computational biologist. What specific knowledge graph? What specific analytical method? What specific aspect of the kinase inhibitor program would benefit from graph-based analysis?
+{
+  "title": "Knowledge Graph Mining for Kinase Inhibitor Target Discovery",
+  "collaboration_type": "computational support",
+  "scientific_question": "Can knowledge graph mining identify new drug targets for Bhatt Lab's kinase inhibitor program?",
+  "one_line_summary_a": "Su Lab could apply knowledge graph mining to expand the target space around your kinase inhibitor program.",
+  "one_line_summary_b": "Bhatt Lab's kinase inhibitor program could provide a disease context for your graph-based target discovery methods.",
+  "detailed_rationale": "At first glance, this looks like a reasonable biology-computation collaboration: one lab has a therapeutic program and the other has graph-mining capability. The proposed value is that graph analysis might surface overlooked targets, pathways, or connections relevant to kinase inhibitor development.",
+  "lab_a_contributions": "Kinase inhibitor program context, disease area knowledge, prioritized biological questions",
+  "lab_b_contributions": "Knowledge graph mining, computational target discovery, network analysis",
+  "lab_a_benefits": "Potential identification of additional targets or pathway connections for the program",
+  "lab_b_benefits": "A concrete translational use case for graph-mining methods",
+  "proposed_first_experiment": "Run graph-based analysis on the kinase inhibitor program to nominate candidate targets and pathways for follow-up.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "Su Lab's contribution is generic. 'Knowledge graph mining' could be applied to nearly any target discovery effort, and the proposal does not identify a specific graph, dataset, biological bottleneck, or analytical method that makes this pairing uniquely valuable. It fails the postdoc test because Bhatt Lab could hire a computational biologist to do roughly the same work."
+}
 
 ### Bad Example 2: Obvious Overlap, No Complementarity
 
-Rejected: "Both labs study Alzheimer's disease using mouse models and could combine their datasets for greater statistical power."
-
-Rejection reason: Shared interest is not synergy. Neither lab brings a capability the other lacks. "Combining datasets" is not a first experiment — it's a vague aspiration with no specific analytical question, no specific readout, and no reason it requires both labs.
+{
+  "title": "Combined Alzheimer's Mouse Datasets for Stronger Statistical Power",
+  "collaboration_type": "dataset aggregation",
+  "scientific_question": "Can two Alzheimer's mouse-model labs combine datasets to strengthen conclusions?",
+  "one_line_summary_a": "A shared Alzheimer's focus creates an opportunity to pool mouse data and increase statistical power.",
+  "one_line_summary_b": "Combining datasets with another Alzheimer's mouse-model lab could broaden the scope of your analyses.",
+  "detailed_rationale": "Because both labs work on Alzheimer's disease in mouse systems, it may seem natural to combine efforts. A pooled analysis could in principle increase sample size, improve robustness, and support broader conclusions than either lab could reach independently.",
+  "lab_a_contributions": "Alzheimer's mouse models, internal datasets, disease expertise",
+  "lab_b_contributions": "Alzheimer's mouse models, internal datasets, disease expertise",
+  "lab_a_benefits": "Larger combined dataset and potentially stronger statistics",
+  "lab_b_benefits": "Larger combined dataset and potentially stronger statistics",
+  "proposed_first_experiment": "Merge datasets from both labs and analyze them together for more statistically powered conclusions.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "Shared disease area is not enough. Neither lab contributes a capability the other clearly lacks, and 'combine datasets' is not a concrete first experiment with a defined question, method, or readout. The overlap is topical rather than synergistic."
+}
 
 ### Bad Example 3: No Concrete First Experiment
 
-Rejected: "Bhatt's chemical biology expertise and Wiseman's ISR signaling knowledge could lead to novel therapeutic strategies for neurodegeneration."
+{
+  "title": "Chemical Biology Meets ISR Signaling in Neurodegeneration",
+  "collaboration_type": "mechanistic extension",
+  "scientific_question": "Can combining chemical biology and ISR signaling expertise generate novel therapeutic strategies for neurodegeneration?",
+  "one_line_summary_a": "Wiseman's ISR signaling work could open new neurodegeneration directions for your chemical biology toolkit.",
+  "one_line_summary_b": "Bhatt's chemical biology expertise could help translate your ISR insights into therapeutic strategies.",
+  "detailed_rationale": "The proposal sounds attractive because the labs appear intellectually complementary: one brings signaling biology and the other brings chemical biology. In principle, that combination could support therapeutic discovery in neurodegeneration.",
+  "lab_a_contributions": "Chemical biology expertise, small-molecule thinking, therapeutic framing",
+  "lab_b_contributions": "ISR signaling expertise, neurodegeneration relevance, pathway interpretation",
+  "lab_a_benefits": "A disease-relevant biological context for applying chemical biology approaches",
+  "lab_b_benefits": "A path toward therapeutic exploration of ISR-related mechanisms",
+  "proposed_first_experiment": "Use chemical biology approaches to explore ISR-related therapeutic opportunities in neurodegeneration.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "This is still only an abstract statement of possible value. It does not specify a concrete scientific question, compound, assay, model, readout, or decision point. Without a real first experiment, it is not yet a collaboration proposal."
+}
 
-Rejection reason: No specific question, no specific experiment, no specific reagents or models named. This is an abstract statement of potential, not a collaboration proposal. What specific compound? What specific assay? What would you measure?`;
+### Bad Example 4: Narrowly Descriptive Imaging Study
+
+{
+  "title": "Cryo-ET Visualization of Disc Matrix Degeneration",
+  "collaboration_type": "methodological enhancement",
+  "scientific_question": "How does disc matrix ultrastructure change during degeneration?",
+  "one_line_summary_a": "Cryo-ET could reveal disc matrix degeneration at ultrastructural resolution in your disease samples.",
+  "one_line_summary_b": "Disc degeneration specimens could provide a new application area for your cryo-ET imaging platform.",
+  "detailed_rationale": "This proposal is appealing because the imaging modality is sophisticated and could generate visually compelling data on tissue degeneration. It appears to pair a biologically relevant sample source with a powerful structural method.",
+  "lab_a_contributions": "Disc degeneration models or specimens, disease context, sample preparation pipeline",
+  "lab_b_contributions": "Cryo-ET imaging expertise, ultrastructural analysis, image-processing workflows",
+  "lab_a_benefits": "High-resolution structural characterization of degenerative changes",
+  "lab_b_benefits": "A new tissue context in which to apply cryo-ET methods",
+  "proposed_first_experiment": "Image degenerated and control disc matrix samples by cryo-ET and compare ultrastructural features.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "This is primarily descriptive and narrow in scope. Even if novel, it does not clearly unlock a mechanistic bottleneck, therapeutic decision, or scalable downstream program. The likely output is characterization rather than a high-leverage collaboration trajectory."
+}
+
+### Bad Example 5: Mechanistic Study Without Near-Term Translational Leverage
+
+{
+  "title": "Chromatin Chemical Biology for Disc Regeneration",
+  "collaboration_type": "mechanistic extension",
+  "scientific_question": "Which chromatin-state changes regulate disc regeneration and can they be chemically modulated?",
+  "one_line_summary_a": "A chromatin-focused collaboration could add mechanistic depth to your disc regeneration work.",
+  "one_line_summary_b": "Disc regeneration biology could provide a compelling system for your chromatin chemical biology approaches.",
+  "detailed_rationale": "This looks promising because it combines an interesting regenerative context with molecular tools that might uncover regulatory control points. Mechanistic depth can sometimes open new therapeutic directions.",
+  "lab_a_contributions": "Disc regeneration models, regenerative biology context, phenotype assays",
+  "lab_b_contributions": "Chromatin chemical biology, epigenetic perturbation strategies, mechanistic interpretation",
+  "lab_a_benefits": "Deeper molecular explanation of regenerative phenotypes",
+  "lab_b_benefits": "A biologically rich application domain for chromatin-focused methods",
+  "proposed_first_experiment": "Apply chromatin-focused perturbations in a disc regeneration system and measure effects on regenerative phenotypes.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "The mechanistic story is not connected to a clear intervention strategy, discovery pipeline, or concrete downstream decision. Mechanistic collaborations can be strong, but this one does not yet show enough near-term leverage to justify recommendation."
+}
+
+### Bad Example 6: Incremental Validation of an Already-Supported Pathway
+
+{
+  "title": "C. elegans Validation of FoxO-H1R Pathway in Aging",
+  "collaboration_type": "mechanistic validation",
+  "scientific_question": "Does the FoxO-H1R pathway also regulate aging phenotypes in C. elegans?",
+  "one_line_summary_a": "A C. elegans aging model could provide orthogonal validation of your FoxO-H1R pathway findings.",
+  "one_line_summary_b": "Your aging platform could test whether FoxO-H1R biology generalizes into worm longevity phenotypes.",
+  "detailed_rationale": "The collaboration appears sensible because an in vivo aging model could offer an independent system for testing pathway relevance. Cross-model validation is often attractive when building confidence in a biological mechanism.",
+  "lab_a_contributions": "FoxO-H1R pathway biology, prior mechanistic findings, candidate perturbations",
+  "lab_b_contributions": "C. elegans aging assays, lifespan or stress-resistance readouts, in vivo model expertise",
+  "lab_a_benefits": "Orthogonal validation of pathway relevance in an aging context",
+  "lab_b_benefits": "A defined pathway hypothesis to test in an established model",
+  "proposed_first_experiment": "Test FoxO-H1R pathway perturbations in C. elegans aging assays and measure lifespan or related phenotypes.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "This would generate only incremental confirmation of a pathway that is already strongly supported. It does not open a sufficiently new question or create enough new leverage to justify a collaboration recommendation."
+}
+
+### Bad Example 7: Generic Screening in an Overused Model
+
+{
+  "title": "High-Throughput Screening for FoxO Activators",
+  "collaboration_type": "screening campaign",
+  "scientific_question": "Can a high-throughput screen identify new FoxO-activating compounds with aging relevance?",
+  "one_line_summary_a": "A fast in vivo screening platform could expand your search for FoxO-activating compounds.",
+  "one_line_summary_b": "Your FoxO biology provides a mechanistic target for an aging-focused small-molecule screen.",
+  "detailed_rationale": "This proposal initially seems useful because it offers a practical route to compound discovery using an established model system. Screens can generate tractable hit lists and create opportunities for follow-up chemistry and biology.",
+  "lab_a_contributions": "FoxO pathway knowledge, screening rationale, downstream biological interpretation",
+  "lab_b_contributions": "High-throughput C. elegans or reporter-based screening platform, assay execution, hit identification",
+  "lab_a_benefits": "New candidate compounds that may modulate FoxO biology",
+  "lab_b_benefits": "A mechanistically framed screening objective in aging biology",
+  "proposed_first_experiment": "Run a high-throughput screen in a C. elegans or related reporter assay to identify FoxO activators for secondary follow-up.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "The model and assay class are overused for this general objective, and the proposal does not explain why this screen would be uniquely informative. It lacks a distinctive hypothesis, a clearly privileged compound space, and a convincing path from hits to disease-relevant follow-up."
+}
+
+### Bad Example 8: Novel but Low-Leverage Descriptive OA Imaging
+
+{
+  "title": "Cryo-ET Visualization of Chondrocyte-Matrix Interface in OA",
+  "collaboration_type": "methodological enhancement",
+  "scientific_question": "How is the chondrocyte-matrix interface remodeled in osteoarthritis?",
+  "one_line_summary_a": "Cryo-ET could provide an unprecedented structural view of the chondrocyte-matrix interface in your OA system.",
+  "one_line_summary_b": "OA cartilage samples would offer a novel disease application for your cryo-ET platform.",
+  "detailed_rationale": "This seems compelling because the question is visually intuitive and the imaging modality is advanced. A direct look at the osteoarthritic chondrocyte-matrix interface could produce striking observations and potentially reveal underappreciated structural features.",
+  "lab_a_contributions": "OA samples or model systems, disease biology context, tissue preparation",
+  "lab_b_contributions": "Cryo-ET imaging, ultrastructural analysis, image-processing expertise",
+  "lab_a_benefits": "Novel structural observations in a clinically relevant tissue context",
+  "lab_b_benefits": "An interesting disease-driven application for advanced imaging methods",
+  "proposed_first_experiment": "Use cryo-ET to compare the chondrocyte-matrix interface in OA versus control samples.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "Novelty alone is not sufficient. The proposal remains largely descriptive and does not clearly create mechanistic leverage, a therapeutic decision point, or a scalable follow-on program. The likely output is interesting but not high-impact enough for this recommendation set."
+}
+
+### Bad Example 9: Superficially Straightforward but Technically Deceptive
+
+{
+  "title": "Heme Metabolomics in PGRMC2 Activation",
+  "collaboration_type": "mechanistic extension",
+  "scientific_question": "How does PGRMC2 activation alter heme-related metabolite profiles in adipose tissue?",
+  "one_line_summary_a": "Siuzdak's METLIN platform could profile heme-related metabolites in your PGRMC2 activator-treated tissues and reveal dynamic changes in heme homeostasis.",
+  "one_line_summary_b": "Saez Lab's PGRMC2 activation model could provide a biologically rich system for your metabolomics platform to map heme-related metabolic remodeling.",
+  "detailed_rationale": "This proposal is attractive because it appears to pair a strong biological perturbation with a powerful measurement platform. A metabolomic readout of heme pools and downstream catabolites could, in principle, complement genetic studies and reveal dynamic features of PGRMC2-driven heme handling that are otherwise hard to capture.",
+  "lab_a_contributions": "PGRMC2 activator-treated mice, adipose tissues, heme biology expertise, metabolic phenotyping context",
+  "lab_b_contributions": "METLIN metabolomics platform, small-molecule profiling expertise, heme and porphyrin analytical standards",
+  "lab_a_benefits": "A systems-level view of how pharmacologic PGRMC2 activation reshapes heme-associated metabolites",
+  "lab_b_benefits": "A biologically motivated application for advanced metabolomic profiling of heme-related species",
+  "proposed_first_experiment": "Saez Lab provides adipose tissue from PGRMC2 activator-treated and control mice. Siuzdak Lab performs targeted and untargeted metabolomics for heme-related species, including free heme, heme-amino acid adducts, biliverdin, and bilirubin, to infer how enhanced heme chaperoning alters downstream metabolism.",
+  "anchoring_publication_pmids": [],
+  "confidence_tier": "low",
+  "rejection_reason": "While interesting in principle, this is technically much harder than it appears. Heme exists in multiple analytically difficult pools, is chemically reactive, and is vulnerable to distortion during extraction and measurement. The proposal presents metabolomic profiling as a relatively straightforward first experiment, but the assay-development burden, standards, sample handling, and interpretation challenges are substantial."
+}`;
 
 // --- Prompt assembly ---
 
